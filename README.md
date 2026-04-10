@@ -1,3 +1,5 @@
+**English** | [中文](README.zh-CN.md) | [日本語](README.ja.md)
+
 # InksPet by EleksCava
 
 > Your AI coding agent, alive on e-paper. **EleksCava x Claude**
