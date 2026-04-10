@@ -1,0 +1,6 @@
+.pio/
+logs/
+.flash_config
+.DS_Store
+firmware/*.bin
+CLAUDE.md

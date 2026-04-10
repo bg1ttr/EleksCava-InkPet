@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InksPet — E-Paper Display Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    color: #777;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 60px 40px 100px;
+    min-height: 100vh;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 64px;
+  }
+
+  h1 {
+    font-size: 13px;
+    letter-spacing: 10px;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  h1 em {
+    font-style: normal;
+    color: #ccc;
+    font-weight: 700;
+  }
+
+  .subtitle {
+    font-size: 10px;
+    color: #444;
+    letter-spacing: 4px;
+    font-weight: 300;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 52px 44px;
+    max-width: 1340px;
+    margin: 0 auto;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .label {
+    font-size: 10px;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 14px;
+    font-weight: 500;
+  }
+
+  .label span {
+    color: #333;
+    margin-right: 8px;
+    font-weight: 700;
+  }
+
+  .screen-wrap {
+    background: #111;
+    padding: 14px;
+    border: 1px solid #1e1e1e;
+    position: relative;
+    border-radius: 2px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.02);
+  }
+
+  .screen-wrap::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 20%;
+    right: 20%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #2a2a2a, transparent);
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+
+  .note {
+    font-size: 9px;
+    color: #333;
+    margin-top: 12px;
+    letter-spacing: 1.5px;
+    text-align: center;
+    max-width: 520px;
+    line-height: 1.6;
+  }
+
+  footer {
+    text-align: center;
+    margin-top: 72px;
+    padding-top: 32px;
+    border-top: 1px solid #151515;
+  }
+
+  footer .main {
+    font-size: 9px;
+    color: #2a2a2a;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  footer .sub {
+    font-size: 8px;
+    color: #1a1a1a;
+    letter-spacing: 2px;
+    margin-top: 8px;
+  }
+
+  .ref-section {
+    max-width: 1340px;
+    margin: 64px auto 0;
+    padding-top: 40px;
+    border-top: 1px solid #151515;
+    display: flex;
+    gap: 48px;
+    justify-content: center;
+  }
+
+  .ref-section .ref-block {
+    text-align: center;
+  }
+
+  .ref-section .ref-title {
+    font-size: 9px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 12px;
+  }
+
+  .ref-section canvas {
+    margin: 0 auto;
+  }
+
+  .ref-section .ref-caption {
+    font-size: 8px;
+    color: #2a2a2a;
+    margin-top: 8px;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><em>InksPet</em> &mdash; E-Paper Display Mockup</h1>
+  <div class="subtitle">296x128 px &nbsp;&middot;&nbsp; 1-bit &nbsp;&middot;&nbsp; Clawd by InksPet</div>
+</header>
+
+<div class="grid">
+  <div class="panel">
+    <div class="label"><span>01</span> Working</div>
+    <div class="screen-wrap"><canvas id="s1" width="888" height="384"></canvas></div>
+    <div class="note">Active session — agent is editing files or running commands</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>02</span> Thinking</div>
+    <div class="screen-wrap"><canvas id="s2" width="888" height="384"></canvas></div>
+    <div class="note">Agent is analyzing context or planning next action</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>03</span> Idle</div>
+    <div class="screen-wrap"><canvas id="s3" width="888" height="384"></canvas></div>
+    <div class="note">No active agent session — device awaits connection</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>04</span> Completed</div>
+    <div class="screen-wrap"><canvas id="s4" width="888" height="384"></canvas></div>
+    <div class="note">Task finished successfully — agent reports completion</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>05</span> Error</div>
+    <div class="screen-wrap"><canvas id="s5" width="888" height="384"></canvas></div>
+    <div class="note">A tool invocation failed or an unexpected error occurred</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>06</span> Permission Request</div>
+    <div class="screen-wrap"><canvas id="s6" width="888" height="384"></canvas></div>
+    <div class="note">Agent requires user approval — buttons map to physical keys A/B/C</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>07</span> Device Info</div>
+    <div class="screen-wrap"><canvas id="s7" width="888" height="384"></canvas></div>
+    <div class="note">System diagnostics — accessible via long-press on button C</div>
+  </div>
+  <div class="panel">
+    <div class="label"><span>08</span> Sleeping</div>
+    <div class="screen-wrap"><canvas id="s8" width="888" height="384"></canvas></div>
+    <div class="note">Low-power sleep mode — minimal refresh, deep sleep enabled</div>
+  </div>
+</div>
+
+<div class="ref-section">
+  <div class="ref-block">
+    <div class="ref-title">Clawd — Base Sprite</div>
+    <canvas id="ref1" width="144" height="144"></canvas>
+    <div class="ref-caption">15x16 source grid &middot; 3x scale in 48x48 area</div>
+  </div>
+  <div class="ref-block">
+    <div class="ref-title">Clawd — Inverted (Sidebar)</div>
+    <canvas id="ref2" width="144" height="144"></canvas>
+    <div class="ref-caption">White on black &middot; as rendered in sidebar</div>
+  </div>
+</div>
+
+<footer>
+  <div class="main">InksPet v2.0 &nbsp;&bull;&nbsp; EleksCava Platform &nbsp;&bull;&nbsp; Spec Sheet Rev.2</div>
+  <div class="sub">All screens rendered at native 296x128, displayed at 3x &nbsp;&bull;&nbsp; 2026</div>
+</footer>
+
+<script>
+// ============================================================
+// BITMAP FONT ENGINE — 5x7 pixel font
+// ============================================================
+const fontDefs = {
+  'A': ['01110','10001','10001','11111','10001','10001','10001'],
+  'B': ['11110','10001','10001','11110','10001','10001','11110'],
+  'C': ['01110','10001','10000','10000','10000','10001','01110'],
+  'D': ['11110','10001','10001','10001','10001','10001','11110'],
+  'E': ['11111','10000','10000','11110','10000','10000','11111'],
+  'F': ['11111','10000','10000','11110','10000','10000','10000'],
+  'G': ['01110','10001','10000','10111','10001','10001','01110'],
+  'H': ['10001','10001','10001','11111','10001','10001','10001'],
+  'I': ['01110','00100','00100','00100','00100','00100','01110'],
+  'J': ['00111','00010','00010','00010','00010','10010','01100'],
+  'K': ['10001','10010','10100','11000','10100','10010','10001'],
+  'L': ['10000','10000','10000','10000','10000','10000','11111'],
+  'M': ['10001','11011','10101','10101','10001','10001','10001'],
+  'N': ['10001','11001','10101','10011','10001','10001','10001'],
+  'O': ['01110','10001','10001','10001','10001','10001','01110'],
+  'P': ['11110','10001','10001','11110','10000','10000','10000'],
+  'Q': ['01110','10001','10001','10001','10101','10010','01101'],
+  'R': ['11110','10001','10001','11110','10100','10010','10001'],
+  'S': ['01110','10001','10000','01110','00001','10001','01110'],
+  'T': ['11111','00100','00100','00100','00100','00100','00100'],
+  'U': ['10001','10001','10001','10001','10001','10001','01110'],
+  'V': ['10001','10001','10001','10001','01010','01010','00100'],
+  'W': ['10001','10001','10001','10101','10101','11011','10001'],
+  'X': ['10001','10001','01010','00100','01010','10001','10001'],
+  'Y': ['10001','10001','01010','00100','00100','00100','00100'],
+  'Z': ['11111','00001','00010','00100','01000','10000','11111'],
+  'a': ['00000','00000','01110','00001','01111','10001','01111'],
+  'b': ['10000','10000','10110','11001','10001','10001','11110'],
+  'c': ['00000','00000','01110','10000','10000','10001','01110'],
+  'd': ['00001','00001','01101','10011','10001','10001','01111'],
+  'e': ['00000','00000','01110','10001','11111','10000','01110'],
+  'f': ['00110','01001','01000','11100','01000','01000','01000'],
+  'g': ['00000','01111','10001','10001','01111','00001','01110'],
+  'h': ['10000','10000','10110','11001','10001','10001','10001'],
+  'i': ['00100','00000','01100','00100','00100','00100','01110'],
+  'j': ['00010','00000','00110','00010','00010','10010','01100'],
+  'k': ['10000','10000','10010','10100','11000','10100','10010'],
+  'l': ['01100','00100','00100','00100','00100','00100','01110'],
+  'm': ['00000','00000','11010','10101','10101','10001','10001'],
+  'n': ['00000','00000','10110','11001','10001','10001','10001'],
+  'o': ['00000','00000','01110','10001','10001','10001','01110'],
+  'p': ['00000','00000','11110','10001','11110','10000','10000'],
+  'q': ['00000','00000','01101','10011','01111','00001','00001'],
+  'r': ['00000','00000','10110','11001','10000','10000','10000'],
+  's': ['00000','00000','01110','10000','01110','00001','11110'],
+  't': ['01000','01000','11100','01000','01000','01001','00110'],
+  'u': ['00000','00000','10001','10001','10001','10011','01101'],
+  'v': ['00000','00000','10001','10001','10001','01010','00100'],
+  'w': ['00000','00000','10001','10001','10101','10101','01010'],
+  'x': ['00000','00000','10001','01010','00100','01010','10001'],
+  'y': ['00000','00000','10001','10001','01111','00001','01110'],
+  'z': ['00000','00000','11111','00010','00100','01000','11111'],
+  '0': ['01110','10001','10011','10101','11001','10001','01110'],
+  '1': ['00100','01100','00100','00100','00100','00100','01110'],
+  '2': ['01110','10001','00001','00010','00100','01000','11111'],
+  '3': ['01110','10001','00001','00110','00001','10001','01110'],
+  '4': ['00010','00110','01010','10010','11111','00010','00010'],
+  '5': ['11111','10000','11110','00001','00001','10001','01110'],
+  '6': ['00110','01000','10000','11110','10001','10001','01110'],
+  '7': ['11111','00001','00010','00100','01000','01000','01000'],
+  '8': ['01110','10001','10001','01110','10001','10001','01110'],
+  '9': ['01110','10001','10001','01111','00001','00010','01100'],
+  '.': ['00000','00000','00000','00000','00000','01100','01100'],
+  ',': ['00000','00000','00000','00000','00100','00100','01000'],
+  ':': ['00000','01100','01100','00000','01100','01100','00000'],
+  ';': ['00000','01100','01100','00000','01100','00100','01000'],
+  '!': ['00100','00100','00100','00100','00100','00000','00100'],
+  '?': ['01110','10001','00001','00010','00100','00000','00100'],
+  '-': ['00000','00000','00000','11111','00000','00000','00000'],
+  '+': ['00000','00100','00100','11111','00100','00100','00000'],
+  '=': ['00000','00000','11111','00000','11111','00000','00000'],
+  '/': ['00001','00010','00010','00100','01000','01000','10000'],
+  '(': ['00010','00100','01000','01000','01000','00100','00010'],
+  ')': ['01000','00100','00010','00010','00010','00100','01000'],
+  '[': ['01110','01000','01000','01000','01000','01000','01110'],
+  ']': ['01110','00010','00010','00010','00010','00010','01110'],
+  '>': ['01000','00100','00010','00001','00010','00100','01000'],
+  '<': ['00010','00100','01000','10000','01000','00100','00010'],
+  '_': ['00000','00000','00000','00000','00000','00000','11111'],
+  ' ': ['00000','00000','00000','00000','00000','00000','00000'],
+  '|': ['00100','00100','00100','00100','00100','00100','00100'],
+  '*': ['00000','10101','01110','11111','01110','10101','00000'],
+  '#': ['01010','01010','11111','01010','11111','01010','01010'],
+  '%': ['11001','11010','00010','00100','01000','01011','10011'],
+  '&': ['01100','10010','10100','01000','10101','10010','01101'],
+  '@': ['01110','10001','10111','10101','10110','10000','01110'],
+  '~': ['00000','00000','01000','10101','00010','00000','00000'],
+  '"': ['01010','01010','01010','00000','00000','00000','00000'],
+  "'": ['00100','00100','01000','00000','00000','00000','00000'],
+  '{': ['00110','01000','01000','11000','01000','01000','00110'],
+  '}': ['01100','00010','00010','00011','00010','00010','01100'],
+  '^': ['00100','01010','10001','00000','00000','00000','00000'],
+};
+
+// Parse font definitions into bitmap arrays
+const FONT = {};
+for (const [ch, rows] of Object.entries(fontDefs)) {
+  FONT[ch] = rows.map(r => r.split('').map(Number));
+}
+
+// ============================================================
+// DRAWING PRIMITIVES
+// ============================================================
+const SCALE = 3;
+const W = 296, H = 128;
+
+function createCtx(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  return ctx;
+}
+
+// Set a single pixel (in 1x coords, rendered at SCALE)
+function px(ctx, x, y, black) {
+  ctx.fillStyle = black ? '#000' : '#fff';
+  ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
+}
+
+function fillRect(ctx, x, y, w, h, black) {
+  ctx.fillStyle = black ? '#000' : '#fff';
+  ctx.fillRect(x * SCALE, y * SCALE, w * SCALE, h * SCALE);
+}
+
+function clearScreen(ctx) {
+  fillRect(ctx, 0, 0, W, H, false);
+}
+
+// Draw a single character at (x,y), returns advance width
+function drawChar(ctx, ch, x, y, black) {
+  const bitmap = FONT[ch];
+  if (!bitmap) return 4;
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (bitmap[row][col]) px(ctx, x + col, y + row, black);
+    }
+  }
+  return 6;
+}
+
+function drawText(ctx, text, x, y, black) {
+  let cx = x;
+  for (const ch of text) cx += drawChar(ctx, ch, cx, y, black);
+  return cx - x;
+}
+
+function measureText(text) {
+  return text.length * 6 - 1;
+}
+
+// 2x scaled text
+function drawLargeChar(ctx, ch, x, y, black) {
+  const bitmap = FONT[ch];
+  if (!bitmap) return 8;
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (bitmap[row][col]) {
+        fillRect(ctx, x + col*2, y + row*2, 2, 2, black);
+      }
+    }
+  }
+  return 12;
+}
+
+function drawLargeText(ctx, text, x, y, black) {
+  let cx = x;
+  for (const ch of text) cx += drawLargeChar(ctx, ch, cx, y, black);
+  return cx - x;
+}
+
+function drawDottedLine(ctx, x1, x2, y, black) {
+  for (let x = x1; x <= x2; x += 3) px(ctx, x, y, black);
+}
+
+// ============================================================
+// CLAWD CHARACTER — rect-based 15x16 grid, drawn at 3x in 48x48
+//
+// Base definition (from static-base.svg):
+//   Body:       rect(2,6)  11x7
+//   Left arm:   rect(0,9)  2x2
+//   Right arm:  rect(13,9) 2x2
+//   Left eye:   rect(4,8)  1x2
+//   Right eye:  rect(10,8) 1x2
+//   Legs:       rect(3,13) 1x2, rect(5,13) 1x2,
+//               rect(9,13) 1x2, rect(11,13) 1x2
+//
+// All coordinates are in the 15x16 source grid.
+// We scale 3x: each source pixel becomes a 3x3 block in the
+// 48x48 character area.
+// ============================================================
+
+// Draw a rect in the 15x16 grid, scaled 3x, offset by (ox, oy) in screen coords
+// fg = true means foreground color (depends on inverted or not)
+function clawdRect(ctx, ox, oy, gx, gy, gw, gh, fg) {
+  fillRect(ctx, ox + gx * 3, oy + gy * 3, gw * 3, gh * 3, fg);
+}
+
+// Draw a single 3x3 block in the grid
+function clawdPx(ctx, ox, oy, gx, gy, fg) {
+  fillRect(ctx, ox + gx * 3, oy + gy * 3, 3, 3, fg);
+}
+
+// Draw the base Clawd character
+// ox, oy = top-left of the 48x48 area in screen (1x) coords
+// inverted: true = white on black (sidebar), false = black on white
+function drawClawdBase(ctx, ox, oy, inverted) {
+  const fg = inverted ? false : true;  // foreground
+  const bg = inverted ? true : false;  // background (for eyes on body)
+
+  // Body (main torso)
+  clawdRect(ctx, ox, oy, 2, 6, 11, 7, fg);
+
+  // Left arm (claw)
+  clawdRect(ctx, ox, oy, 0, 9, 2, 2, fg);
+
+  // Right arm (claw)
+  clawdRect(ctx, ox, oy, 13, 9, 2, 2, fg);
+
+  // Eyes — these are holes in the body, so opposite color
+  clawdRect(ctx, ox, oy, 4, 8, 1, 2, bg);
+  clawdRect(ctx, ox, oy, 10, 8, 1, 2, bg);
+
+  // Legs
+  clawdRect(ctx, ox, oy, 3, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 5, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 9, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 11, 13, 1, 2, fg);
+}
+
+// ---- STATE VARIANTS ----
+
+function drawClawdIdle(ctx, ox, oy, inverted) {
+  drawClawdBase(ctx, ox, oy, inverted);
+}
+
+function drawClawdThinking(ctx, ox, oy, inverted) {
+  drawClawdBase(ctx, ox, oy, inverted);
+  const fg = inverted ? false : true;
+  // 3 ascending dots above head (thought bubble)
+  clawdPx(ctx, ox, oy, 8, 3, fg);
+  clawdPx(ctx, ox, oy, 9, 1, fg);
+  clawdPx(ctx, ox, oy, 10, 1, fg);
+  clawdPx(ctx, ox, oy, 10, 0, fg);
+}
+
+function drawClawdWorking(ctx, ox, oy, inverted) {
+  const fg = inverted ? false : true;
+  const bg = inverted ? true : false;
+
+  // Body (same position)
+  clawdRect(ctx, ox, oy, 2, 4, 11, 7, fg);
+
+  // Eyes looking down — narrower (1x1 instead of 1x2)
+  clawdRect(ctx, ox, oy, 4, 8, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 10, 8, 1, 1, bg);
+
+  // Arms angled downward toward keyboard
+  clawdRect(ctx, ox, oy, 1, 10, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 0, 12, 1, 1, fg);
+  clawdRect(ctx, ox, oy, 13, 10, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 14, 12, 1, 1, fg);
+
+  // Legs
+  clawdRect(ctx, ox, oy, 3, 11, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 5, 11, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 9, 11, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 11, 11, 1, 2, fg);
+
+  // Keyboard below (small rectangle)
+  clawdRect(ctx, ox, oy, 1, 14, 13, 2, fg);
+  // Key gaps
+  clawdRect(ctx, ox, oy, 4, 14, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 7, 14, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 10, 14, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 3, 15, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 6, 15, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 9, 15, 1, 1, bg);
+  clawdRect(ctx, ox, oy, 11, 15, 1, 1, bg);
+}
+
+function drawClawdSleeping(ctx, ox, oy, inverted) {
+  const fg = inverted ? false : true;
+  const bg = inverted ? true : false;
+
+  // Body compressed / lowered (shifted down, shorter height)
+  clawdRect(ctx, ox, oy, 2, 9, 11, 5, fg);
+
+  // Left arm resting
+  clawdRect(ctx, ox, oy, 0, 11, 2, 2, fg);
+  // Right arm resting
+  clawdRect(ctx, ox, oy, 13, 11, 2, 2, fg);
+
+  // Eyes as horizontal lines (closed) — 2 wide, 1 tall
+  clawdRect(ctx, ox, oy, 4, 11, 2, 1, bg);
+  clawdRect(ctx, ox, oy, 9, 11, 2, 1, bg);
+
+  // Legs (short, tucked)
+  clawdRect(ctx, ox, oy, 3, 14, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 5, 14, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 9, 14, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 11, 14, 1, 2, fg);
+
+  // "z z" above
+  // Small z at (9, 6)
+  clawdPx(ctx, ox, oy, 9, 7, fg);
+  clawdPx(ctx, ox, oy, 10, 7, fg);
+  clawdPx(ctx, ox, oy, 10, 8, fg);
+  clawdPx(ctx, ox, oy, 9, 8, fg); // Actually draw a tiny Z shape
+
+  // Larger Z at (11, 3)
+  clawdPx(ctx, ox, oy, 11, 3, fg);
+  clawdPx(ctx, ox, oy, 12, 3, fg);
+  clawdPx(ctx, ox, oy, 13, 3, fg);
+  clawdPx(ctx, ox, oy, 12, 4, fg);
+  clawdPx(ctx, ox, oy, 11, 5, fg);
+  clawdPx(ctx, ox, oy, 12, 5, fg);
+  clawdPx(ctx, ox, oy, 13, 5, fg);
+}
+
+function drawClawdError(ctx, ox, oy, inverted) {
+  const fg = inverted ? false : true;
+  const bg = inverted ? true : false;
+
+  // Body
+  clawdRect(ctx, ox, oy, 2, 6, 11, 7, fg);
+
+  // Eyes wider (2x2 instead of 1x2)
+  clawdRect(ctx, ox, oy, 4, 7, 2, 2, bg);
+  clawdRect(ctx, ox, oy, 9, 7, 2, 2, bg);
+
+  // Arms raised up
+  clawdRect(ctx, ox, oy, 0, 5, 2, 2, fg);
+  clawdRect(ctx, ox, oy, 13, 5, 2, 2, fg);
+
+  // Legs
+  clawdRect(ctx, ox, oy, 3, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 5, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 9, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 11, 13, 1, 2, fg);
+
+  // "!" above head
+  clawdRect(ctx, ox, oy, 7, 1, 1, 3, fg);
+  clawdPx(ctx, ox, oy, 7, 5, fg);
+}
+
+function drawClawdCompleted(ctx, ox, oy, inverted) {
+  const fg = inverted ? false : true;
+  const bg = inverted ? true : false;
+
+  // Body
+  clawdRect(ctx, ox, oy, 2, 6, 11, 7, fg);
+
+  // Happy eyes — inverted U shapes (3 wide, 2 tall arch)
+  // Left eye: U shape
+  clawdPx(ctx, ox, oy, 4, 9, bg);
+  clawdPx(ctx, ox, oy, 5, 8, bg);
+  clawdPx(ctx, ox, oy, 6, 9, bg);
+
+  // Right eye: U shape
+  clawdPx(ctx, ox, oy, 9, 9, bg);
+  clawdPx(ctx, ox, oy, 10, 8, bg);
+  clawdPx(ctx, ox, oy, 11, 9, bg);
+
+  // Arms raised high
+  clawdRect(ctx, ox, oy, 0, 4, 2, 2, fg);
+  clawdRect(ctx, ox, oy, 13, 4, 2, 2, fg);
+
+  // Legs
+  clawdRect(ctx, ox, oy, 3, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 5, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 9, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 11, 13, 1, 2, fg);
+
+  // Star above: * pattern
+  clawdPx(ctx, ox, oy, 7, 0, fg);
+  clawdPx(ctx, ox, oy, 6, 1, fg);
+  clawdPx(ctx, ox, oy, 7, 1, fg);
+  clawdPx(ctx, ox, oy, 8, 1, fg);
+  clawdPx(ctx, ox, oy, 5, 2, fg);
+  clawdPx(ctx, ox, oy, 7, 2, fg);
+  clawdPx(ctx, ox, oy, 9, 2, fg);
+  clawdPx(ctx, ox, oy, 7, 3, fg);
+}
+
+function drawClawdPermission(ctx, ox, oy, inverted) {
+  const fg = inverted ? false : true;
+  const bg = inverted ? true : false;
+
+  // Body
+  clawdRect(ctx, ox, oy, 2, 6, 11, 7, fg);
+
+  // Normal eyes
+  clawdRect(ctx, ox, oy, 4, 8, 1, 2, bg);
+  clawdRect(ctx, ox, oy, 10, 8, 1, 2, bg);
+
+  // Left arm normal
+  clawdRect(ctx, ox, oy, 0, 9, 2, 2, fg);
+
+  // Right arm raised (asking)
+  clawdRect(ctx, ox, oy, 13, 5, 2, 2, fg);
+
+  // Legs
+  clawdRect(ctx, ox, oy, 3, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 5, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 9, 13, 1, 2, fg);
+  clawdRect(ctx, ox, oy, 11, 13, 1, 2, fg);
+
+  // "?" above head
+  clawdPx(ctx, ox, oy, 6, 1, fg);
+  clawdPx(ctx, ox, oy, 7, 1, fg);
+  clawdPx(ctx, ox, oy, 8, 1, fg);
+  clawdPx(ctx, ox, oy, 8, 2, fg);
+  clawdPx(ctx, ox, oy, 7, 3, fg);
+  clawdPx(ctx, ox, oy, 7, 5, fg);
+}
+
+// ============================================================
+// LAYOUT CONSTANTS
+// ============================================================
+const SIDEBAR_W = 62;
+const INFOBAR_H = 16;
+
+function drawSidebar(ctx) {
+  fillRect(ctx, 0, 0, SIDEBAR_W, H, true);
+}
+
+function drawInfoBar(ctx, left, right) {
+  fillRect(ctx, 0, H - INFOBAR_H, W, INFOBAR_H, true);
+  drawText(ctx, left, 4, H - INFOBAR_H + 5, false);
+  const rw = measureText(right);
+  drawText(ctx, right, W - rw - 4, H - INFOBAR_H + 5, false);
+}
+
+function drawSidebarLabel(ctx, label) {
+  const lw = measureText(label);
+  const lx = Math.floor((SIDEBAR_W - lw) / 2);
+  drawText(ctx, label, lx, H - INFOBAR_H - 12, false);
+}
+
+// Draw Clawd centered in the sidebar (above the label)
+// The sidebar is 62px wide, character area is 48px (16 grids * 3)
+// Center horizontally: (62 - 15*3) / 2 = (62 - 45) / 2 = 8.5 -> 8
+// Vertically: place so character sits nicely above label
+function sidebarClawdPos() {
+  const ox = Math.floor((SIDEBAR_W - 15 * 3) / 2); // ~8
+  const oy = 18; // top padding in sidebar
+  return { ox, oy };
+}
+
+function drawContentArea(ctx, title, agentName, toolLine) {
+  const cx = SIDEBAR_W + 12;
+  let cy = 10;
+
+  drawLargeText(ctx, title, cx, cy, true);
+  cy += 22;
+
+  if (agentName) {
+    // Small filled dot
+    fillRect(ctx, cx, cy + 2, 3, 3, true);
+    drawText(ctx, agentName, cx + 7, cy, true);
+    cy += 12;
+  }
+
+  drawDottedLine(ctx, cx, W - 12, cy, true);
+  cy += 8;
+
+  if (toolLine) {
+    drawText(ctx, toolLine, cx, cy, true);
+  }
+}
+
+// ============================================================
+// RENDER ALL 8 SCREENS
+// ============================================================
+
+function renderScreen1_Working() {
+  const ctx = createCtx('s1');
+  clearScreen(ctx);
+  drawSidebar(ctx);
+  const { ox, oy } = sidebarClawdPos();
+  drawClawdWorking(ctx, ox, oy, true);
+  drawSidebarLabel(ctx, 'WORK');
+  drawInfoBar(ctx, 'up 23m', '213K free');
+  drawContentArea(ctx, 'Working', 'Claude Code', '> Edit src/main.cpp');
+}
+
+function renderScreen2_Thinking() {
+  const ctx = createCtx('s2');
+  clearScreen(ctx);
+  drawSidebar(ctx);
+  const { ox, oy } = sidebarClawdPos();
+  drawClawdThinking(ctx, ox, oy, true);
+  drawSidebarLabel(ctx, 'THINK');
+  drawInfoBar(ctx, 'up 24m', '212K free');
+  drawContentArea(ctx, 'Thinking...', 'Claude Code', null);
+}
+
+function renderScreen3_Idle() {
+  const ctx = createCtx('s3');
+  clearScreen(ctx);
+  drawSidebar(ctx);
+  const { ox, oy } = sidebarClawdPos();
+  drawClawdIdle(ctx, ox, oy, true);
+  drawSidebarLabel(ctx, 'IDLE');
+  drawInfoBar(ctx, 'up 1h12m', '215K free');
+  drawContentArea(ctx, 'Idle', null, null);
+}
+
+function renderScreen4_Completed() {
+  const ctx = createCtx('s4');
+  clearScreen(ctx);
+  drawSidebar(ctx);
+  const { ox, oy } = sidebarClawdPos();
+  drawClawdCompleted(ctx, ox, oy, true);
+  drawSidebarLabel(ctx, 'DONE');
+  drawInfoBar(ctx, 'up 25m', '210K free');
+  drawContentArea(ctx, 'Done!', 'Claude Code', null);
+}
+
+function renderScreen5_Error() {
+  const ctx = createCtx('s5');
+  clearScreen(ctx);
+  drawSidebar(ctx);
+  const { ox, oy } = sidebarClawdPos();
+  drawClawdError(ctx, ox, oy, true);
+  drawSidebarLabel(ctx, 'ERR!');
+  drawInfoBar(ctx, 'up 26m', '208K free');
+  drawContentArea(ctx, 'Error!', 'Claude Code', '> Bash failed');
+}
+
+function renderScreen6_Permission() {
+  const ctx = createCtx('s6');
+  clearScreen(ctx);
+
+  // Full-width black header
+  fillRect(ctx, 0, 0, W, 18, true);
+  drawText(ctx, '! PERMISSION REQUEST', 6, 6, false);
+
+  // Body area
+  drawText(ctx, 'Claude Code wants to:', 8, 26, true);
+
+  // Black highlight box with action
+  const boxY = 40;
+  fillRect(ctx, 8, boxY, W - 16, 20, true);
+  drawText(ctx, 'Edit  src/server.cpp', 14, boxY + 7, false);
+
+  // Three button columns
+  const btnY = 72;
+  const btnH = 18;
+  const btnW = 85;
+  const gap = 8;
+  const startX = 10;
+
+  // [A] ALLOW — solid filled
+  fillRect(ctx, startX, btnY, btnW, btnH, true);
+  drawText(ctx, '[A] ALLOW', startX + 10, btnY + 6, false);
+
+  // [B] ALWAYS — outlined
+  const bx = startX + btnW + gap;
+  fillRect(ctx, bx, btnY, btnW, btnH, true);
+  fillRect(ctx, bx + 1, btnY + 1, btnW - 2, btnH - 2, false);
+  drawText(ctx, '[B] ALWAYS', bx + 7, btnY + 6, true);
+
+  // [C] DENY — outlined
+  const dx = bx + btnW + gap;
+  fillRect(ctx, dx, btnY, btnW, btnH, true);
+  fillRect(ctx, dx + 1, btnY + 1, btnW - 2, btnH - 2, false);
+  drawText(ctx, '[C] DENY', dx + 13, btnY + 6, true);
+
+  // Hint line
+  drawText(ctx, 'Press button to respond', 8, 98, true);
+
+  // Info bar
+  drawInfoBar(ctx, 'up 23m', '213K free');
+}
+
+function renderScreen7_DeviceInfo() {
+  const ctx = createCtx('s7');
+  clearScreen(ctx);
+
+  // Header
+  fillRect(ctx, 0, 0, W, 18, true);
+  drawText(ctx, 'InksPet Device Info', 6, 6, false);
+
+  const lines = [
+    'IP:    192.168.1.42',
+    'MAC:   AA:BB:CC:DD:EE:FF',
+    'WiFi:  -62 dBm (Good)',
+    'Batt:  4.1V (USB)',
+    'Heap:  213K / 320K',
+    'FW:    v2.0.1-beta',
+    'Up:    2h 05m 33s',
+  ];
+
+  let y = 24;
+  for (const line of lines) {
+    drawText(ctx, line, 8, y, true);
+    y += 12;
+  }
+
+  fillRect(ctx, 0, H - INFOBAR_H, W, INFOBAR_H, true);
+  drawText(ctx, '[C] Back', 4, H - INFOBAR_H + 5, false);
+  const bld = 'Build: 20260410';
+  drawText(ctx, bld, W - measureText(bld) - 4, H - INFOBAR_H + 5, false);
+}
+
+function renderScreen8_Sleeping() {
+  const ctx = createCtx('s8');
+  clearScreen(ctx);
+  drawSidebar(ctx);
+  const { ox, oy } = sidebarClawdPos();
+  drawClawdSleeping(ctx, ox, oy, true);
+  drawSidebarLabel(ctx, 'ZZZ');
+  drawInfoBar(ctx, 'up 2h05m', '211K free');
+
+  const cx = SIDEBAR_W + 12;
+  drawLargeText(ctx, 'Sleeping', cx, 10, true);
+  drawDottedLine(ctx, cx, W - 12, 36, true);
+  drawText(ctx, 'Deep sleep mode', cx, 44, true);
+}
+
+// ============================================================
+// REFERENCE SPRITES
+// ============================================================
+
+function renderRefSprites() {
+  // Ref 1: Clawd on white background (black pixels)
+  const c1 = document.getElementById('ref1');
+  const ctx1 = c1.getContext('2d');
+  ctx1.imageSmoothingEnabled = false;
+  // White background
+  ctx1.fillStyle = '#fff';
+  ctx1.fillRect(0, 0, 144, 144);
+  // Draw at center: (144 - 45) / 2 = 49.5 -> offset ~16px in 1x = 48 in canvas
+  // Actually we draw in canvas pixels directly here since it's a standalone canvas
+  // The ref canvas is 144x144 = 48x48 at 3x
+  // So offset in grid coords: center the 15-wide char: (48/3 - 15)/2 = (16-15)/2 = 0.5 -> 0
+  // Center the 16-tall char: (48/3 - 16)/2 = 0
+  // Actually 48px canvas at 3x = 144 display. Draw Clawd occupying most of it.
+  // ox, oy in 1x screen coords. The ref canvas maps 1:1 with pixels.
+  // Let's use a simple approach: draw rects directly in canvas pixels.
+
+  function refRect(ctx, gx, gy, gw, gh, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(gx * 3, gy * 3, gw * 3, gh * 3);
+  }
+
+  // Black on white
+  const padX = Math.floor((48 - 15 * 3) / 2); // (48-45)/2 = 1.5 -> 1
+  const padY = Math.floor((48 - 16 * 3) / 2); // (48-48)/2 = 0
+
+  function drawRefClawd(ctx, bg, fg) {
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 144, 144);
+
+    function r(gx, gy, gw, gh) {
+      ctx.fillStyle = fg;
+      ctx.fillRect(padX + gx * 3, padY + gy * 3, gw * 3, gh * 3);
+    }
+    function eye(gx, gy, gw, gh) {
+      ctx.fillStyle = bg;
+      ctx.fillRect(padX + gx * 3, padY + gy * 3, gw * 3, gh * 3);
+    }
+
+    r(2, 6, 11, 7);    // Body
+    r(0, 9, 2, 2);     // Left arm
+    r(13, 9, 2, 2);    // Right arm
+    eye(4, 8, 1, 2);   // Left eye
+    eye(10, 8, 1, 2);  // Right eye
+    r(3, 13, 1, 2);    // Legs
+    r(5, 13, 1, 2);
+    r(9, 13, 1, 2);
+    r(11, 13, 1, 2);
+  }
+
+  drawRefClawd(ctx1, '#fff', '#000');
+
+  const c2 = document.getElementById('ref2');
+  const ctx2 = c2.getContext('2d');
+  ctx2.imageSmoothingEnabled = false;
+  drawRefClawd(ctx2, '#000', '#fff');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+renderScreen1_Working();
+renderScreen2_Thinking();
+renderScreen3_Idle();
+renderScreen4_Completed();
+renderScreen5_Error();
+renderScreen6_Permission();
+renderScreen7_DeviceInfo();
+renderScreen8_Sleeping();
+renderRefSprites();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,11 @@
+#pragma once
+
+#define FIRMWARE_VERSION "1.0.0"
+#define FIRMWARE_NAME    "InksPet"
+#define HARDWARE_PLATFORM "EleksCava Gen2"
+
+#ifndef INKSPET_VERSION
+#define INKSPET_VERSION FIRMWARE_VERSION
+#endif
+
+#define VERSION INKSPET_VERSION

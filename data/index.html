@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>InksPet — AI Agent Monitor</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Dashboard-specific styles */
+
+/* Pixel art avatar strip */
+.pet-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0 4px;
+}
+
+.pet-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  width: 80px;
+  height: 80px;
+}
+
+/* Animated pixel art via CSS — 4 frames cycling */
+.pet-sprite {
+  width: 80px;
+  height: 80px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* SVG-based pixel art characters per state */
+.pet-svg {
+  width: 80px;
+  height: 80px;
+  display: block;
+}
+
+/* Sessions count pill */
+.sessions-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(118,185,0,0.12);
+  border: 1px solid rgba(118,185,0,0.3);
+  border-radius: 99px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+/* State card main area */
+.state-card {
+  text-align: center;
+}
+
+/* Scanline overlay on state card for terminal vibe */
+.state-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+}
+
+.card.state-card { position: relative; overflow: hidden; }
+
+/* Glow accent on the state card when active */
+.card.state-card.active {
+  border-color: rgba(118,185,0,0.4);
+  box-shadow: 0 0 24px rgba(118,185,0,0.08), var(--shadow-card);
+}
+
+/* LED color ring preview */
+.led-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.15);
+  display: inline-block;
+  flex-shrink: 0;
+  transition: background 0.5s ease, box-shadow 0.5s ease;
+}
+
+/* Device info mini-grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.info-cell {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+
+.info-cell:nth-child(odd) { padding-right: 12px; border-right: 1px solid rgba(48,54,61,0.5); }
+.info-cell:nth-child(even) { padding-left: 12px; }
+.info-cell:nth-last-child(-n+2) { border-bottom: none; }
+
+.info-cell-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+  margin-bottom: 2px;
+}
+
+.info-cell-value {
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  word-break: break-all;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="logo">
+        <div class="logo-icon">🐾</div>
+        <div class="logo-text">
+          <span class="logo-name">InksPet</span>
+          <span class="logo-tagline" id="tagline">AI Agent Desktop Companion</span>
+        </div>
+      </a>
+      <div class="header-actions">
+        <div class="conn-status">
+          <span class="conn-dot" id="conn-dot"></span>
+          <span id="conn-label" data-lang-key="disconnected">OFFLINE</span>
+        </div>
+        <div class="lang-toggle">
+          <button class="lang-btn active" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="zh">中</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Agent State Card -->
+  <div class="card state-card" id="state-card">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot"></span>
+        <span data-lang-key="agent_status" id="lbl-agent-status">Agent Status</span>
+      </span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="led-ring" id="led-ring"></span>
+        <span class="sessions-pill" id="sessions-pill" style="display:none">
+          <span id="sessions-count">0</span>
+          <span data-lang-key="sessions">sessions</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Pixel art pet -->
+    <div class="pet-strip">
+      <div id="pet-art">
+        <!-- SVG pixel art injected by JS per state -->
+      </div>
+    </div>
+
+    <!-- State name -->
+    <div class="state-main">
+      <div class="state-big" id="state-name">--</div>
+      <div class="state-agent" id="state-agent"></div>
+      <div class="state-tool" id="state-tool"></div>
+    </div>
+  </div>
+
+  <!-- Device Info Card -->
+  <div class="card" id="device-card">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:var(--info)"></span>
+        <span id="lbl-device-info">Device Info</span>
+      </span>
+      <span style="font-size:11px;font-family:var(--font-mono);color:var(--text-dim)" id="firmware-ver">v--</span>
+    </div>
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="info-cell-label" id="lbl-ip">IP</div>
+        <div class="info-cell-value" id="dev-ip">--</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label" id="lbl-mac">MAC</div>
+        <div class="info-cell-value" id="dev-mac">--</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label" id="lbl-wifi">WiFi</div>
+        <div class="info-cell-value" id="dev-wifi">--</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label" id="lbl-battery">Battery</div>
+        <div class="info-cell-value" id="dev-battery">--</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label" id="lbl-heap">Free Heap</div>
+        <div class="info-cell-value" id="dev-heap">--</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label" id="lbl-uptime">Uptime</div>
+        <div class="info-cell-value" id="dev-uptime">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="action-grid">
+    <a href="wifi_config.html" class="action-btn">
+      <span class="action-btn-icon">📶</span>
+      <span class="action-btn-label" id="lbl-wifi-setup">WiFi Setup</span>
+      <span class="action-btn-desc" id="desc-wifi-setup">Connect to network</span>
+    </a>
+    <a href="config.html" class="action-btn">
+      <span class="action-btn-icon">⚙️</span>
+      <span class="action-btn-label" id="lbl-dev-config">Device Config</span>
+      <span class="action-btn-desc" id="desc-dev-config">LED, sound, display</span>
+    </a>
+    <a href="javascript:void(0)" class="action-btn" onclick="openHookSetup()" style="grid-column:1/-1">
+      <span class="action-btn-icon">🔗</span>
+      <span class="action-btn-label" id="lbl-hook-setup">Hook Setup</span>
+      <span class="action-btn-desc" id="desc-hook-setup">Connect your AI agent</span>
+    </a>
+  </div>
+
+  <!-- Hook Setup Modal -->
+  <div id="hook-modal" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.75);overflow-y:auto;padding:20px">
+    <div style="max-width:640px;margin:20px auto;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+      <!-- Modal Header -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);background:rgba(118,185,0,0.06)">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--text)">🔗 <span id="modal-title">Connect Your AI Agent</span></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px" id="modal-subtitle">Copy the prompt below and paste it to your AI coding assistant</div>
+        </div>
+        <button onclick="closeHookSetup()" style="background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:4px 8px">&times;</button>
+      </div>
+
+      <!-- Tab buttons -->
+      <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto" id="hook-tabs">
+        <button class="hook-tab active" onclick="showHookTab('claude')">Claude Code</button>
+        <button class="hook-tab" onclick="showHookTab('prompt')">Any AI Agent</button>
+        <button class="hook-tab" onclick="showHookTab('manual')">Manual (JSON)</button>
+      </div>
+
+      <!-- Tab: Claude Code -->
+      <div class="hook-pane" id="pane-claude">
+        <div style="padding:16px 20px">
+          <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5" id="claude-desc">
+            Copy this prompt and paste it into Claude Code (or any AI coding assistant). It will configure the hooks automatically.
+          </p>
+          <div style="position:relative">
+            <pre id="claude-prompt" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:320px;overflow-y:auto;margin:0"></pre>
+            <button onclick="copyBlock('claude-prompt')" style="position:absolute;top:8px;right:8px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">
+              <span id="copy-btn-claude">COPY</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Any AI Agent (universal prompt) -->
+      <div class="hook-pane" id="pane-prompt" style="display:none">
+        <div style="padding:16px 20px">
+          <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5">
+            This universal prompt works with any AI coding assistant (Copilot, Cursor, Codex, etc). Paste it and the AI will figure out how to set up hooks for its own tool.
+          </p>
+          <div style="position:relative">
+            <pre id="universal-prompt" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:320px;overflow-y:auto;margin:0"></pre>
+            <button onclick="copyBlock('universal-prompt')" style="position:absolute;top:8px;right:8px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Manual JSON -->
+      <div class="hook-pane" id="pane-manual" style="display:none">
+        <div style="padding:16px 20px">
+          <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5">
+            Add this JSON to your Claude Code <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-size:12px">~/.claude/settings.json</code> hooks section:
+          </p>
+          <div style="position:relative">
+            <pre id="manual-json" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:11px;font-family:var(--font-mono);color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;max-height:400px;overflow-y:auto;margin:0"></pre>
+            <button onclick="copyBlock('manual-json')" style="position:absolute;top:8px;right:8px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- API endpoint info -->
+      <div style="padding:12px 20px;border-top:1px solid var(--border);background:rgba(0,0,0,0.2)">
+        <div style="font-size:11px;font-family:var(--font-mono);color:var(--text-dim)">
+          <span style="color:var(--accent)">POST</span> <span id="api-endpoint">http://--/api/agent/state</span>
+          &nbsp;·&nbsp;
+          <span style="color:var(--accent)">GET</span> <span id="api-status">http://--/api/agent/status</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .hook-tab{background:none;border:none;color:var(--text-dim);padding:10px 16px;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;white-space:nowrap}
+    .hook-tab:hover{color:var(--text)}
+    .hook-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  </style>
+
+  <footer class="footer">
+    <span>InksPet by <a href="https://elekscava.com" target="_blank">EleksCava</a></span>
+    &nbsp;·&nbsp;
+    <span id="footer-hw">EleksCava Gen2</span>
+  </footer>
+
+</div><!-- /container -->
+
+<script src="script.js"></script>
+<script>
+/* =====================================================
+   Dashboard page logic
+   ===================================================== */
+
+// --- Pixel art per state (SVG, pixelated style) ---
+const PIXEL_ART = {
+  idle: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="2" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="4" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="4" width="1" height="1" fill="#0d1117"/>
+    <rect x="7" y="6" width="2" height="1" fill="#0d1117"/>
+    <rect x="4" y="8" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <rect x="3" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="11" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="5" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  sleeping: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="2" width="6" height="6" rx="1" fill="#4d5a3a"/>
+    <rect x="6" y="4" width="2" height="1" fill="#2a3020"/>
+    <rect x="9" y="4" width="2" height="1" fill="#2a3020"/>
+    <rect x="7" y="6" width="2" height="1" fill="#2a3020"/>
+    <rect x="4" y="8" width="8" height="5" rx="1" fill="#3a4530"/>
+    <rect x="3" y="9" width="2" height="3" rx="1" fill="#4d5a3a"/>
+    <rect x="11" y="9" width="2" height="3" rx="1" fill="#4d5a3a"/>
+    <rect x="5" y="13" width="2" height="2" rx="1" fill="#4d5a3a"/>
+    <rect x="9" y="13" width="2" height="2" rx="1" fill="#4d5a3a"/>
+    <text x="11" y="4" font-size="3" fill="#8b949e">z</text>
+    <text x="12" y="2" font-size="2" fill="#6e7681">z</text>
+  </svg>`,
+
+  thinking: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="3" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="5" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="5" width="1" height="1" fill="#0d1117"/>
+    <rect x="7" y="3" width="2" height="1" fill="#76B900"/>
+    <!-- thought bubble -->
+    <rect x="10" y="0" width="5" height="3" rx="1" fill="#58a6ff" opacity="0.7"/>
+    <rect x="10" y="3" width="1" height="1" fill="#58a6ff" opacity="0.5"/>
+    <rect x="9" y="4" width="1" height="1" fill="#58a6ff" opacity="0.3"/>
+    <rect x="7" y="6" width="2" height="1" fill="#0d1117"/>
+    <rect x="4" y="9" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <rect x="3" y="10" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="11" y="10" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="5" y="14" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="14" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  typing: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="1" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="3" width="1" height="2" fill="#0d1117"/>
+    <rect x="9" y="3" width="1" height="2" fill="#0d1117"/>
+    <rect x="7" y="5" width="2" height="1" fill="#0d1117"/>
+    <rect x="4" y="7" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <!-- keyboard arms -->
+    <rect x="2" y="9" width="3" height="2" rx="1" fill="#76B900"/>
+    <rect x="11" y="9" width="3" height="2" rx="1" fill="#76B900"/>
+    <!-- keyboard -->
+    <rect x="2" y="12" width="12" height="3" rx="1" fill="#30363d"/>
+    <rect x="3" y="13" width="1" height="1" fill="#58a6ff"/>
+    <rect x="5" y="13" width="1" height="1" fill="#58a6ff"/>
+    <rect x="7" y="13" width="2" height="1" fill="#76B900"/>
+    <rect x="10" y="13" width="1" height="1" fill="#58a6ff"/>
+    <rect x="12" y="13" width="1" height="1" fill="#58a6ff"/>
+    <rect x="5" y="7" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="7" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  building: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="1" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="3" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="3" width="1" height="1" fill="#0d1117"/>
+    <rect x="6" y="5" width="4" height="1" fill="#0d1117"/>
+    <!-- hard hat -->
+    <rect x="4" y="0" width="8" height="2" rx="1" fill="#e3b341"/>
+    <rect x="3" y="1" width="10" height="1" fill="#e3b341"/>
+    <rect x="4" y="7" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <rect x="2" y="8" width="3" height="2" rx="1" fill="#76B900"/>
+    <rect x="11" y="8" width="3" height="2" rx="1" fill="#76B900"/>
+    <!-- tool -->
+    <rect x="13" y="7" width="1" height="4" rx="0" fill="#8b949e"/>
+    <rect x="12" y="6" width="3" height="2" rx="1" fill="#6e7681"/>
+    <rect x="5" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  error: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="2" width="6" height="6" rx="1" fill="#76B900"/>
+    <!-- X eyes -->
+    <rect x="6" y="3" width="1" height="1" fill="#f85149"/>
+    <rect x="7" y="4" width="1" height="1" fill="#f85149"/>
+    <rect x="7" y="3" width="1" height="1" fill="#f85149"/>
+    <rect x="6" y="4" width="1" height="1" fill="#f85149"/>
+    <rect x="9" y="3" width="1" height="1" fill="#f85149"/>
+    <rect x="10" y="4" width="1" height="1" fill="#f85149"/>
+    <rect x="10" y="3" width="1" height="1" fill="#f85149"/>
+    <rect x="9" y="4" width="1" height="1" fill="#f85149"/>
+    <!-- wavy mouth -->
+    <rect x="7" y="6" width="1" height="1" fill="#f85149"/>
+    <rect x="8" y="7" width="1" height="1" fill="#f85149"/>
+    <rect x="9" y="6" width="1" height="1" fill="#f85149"/>
+    <rect x="4" y="8" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <rect x="3" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="11" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="5" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <!-- sweat drops -->
+    <rect x="3" y="3" width="1" height="2" fill="#58a6ff" opacity="0.6"/>
+    <rect x="12" y="4" width="1" height="2" fill="#58a6ff" opacity="0.6"/>
+  </svg>`,
+
+  attention: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="1" width="6" height="6" rx="1" fill="#76B900"/>
+    <!-- star eyes -->
+    <rect x="6" y="3" width="2" height="2" fill="#e3b341"/>
+    <rect x="9" y="3" width="2" height="2" fill="#e3b341"/>
+    <!-- big smile -->
+    <rect x="6" y="6" width="4" height="1" fill="#0d1117"/>
+    <rect x="5" y="5" width="1" height="1" fill="#0d1117"/>
+    <rect x="10" y="5" width="1" height="1" fill="#0d1117"/>
+    <!-- arms up -->
+    <rect x="4" y="7" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <rect x="1" y="6" width="3" height="2" rx="1" fill="#76B900" transform="rotate(-30 2.5 7)"/>
+    <rect x="12" y="6" width="3" height="2" rx="1" fill="#76B900" transform="rotate(30 13.5 7)"/>
+    <!-- stars -->
+    <rect x="1" y="3" width="1" height="1" fill="#e3b341"/>
+    <rect x="14" y="2" width="1" height="1" fill="#e3b341"/>
+    <rect x="0" y="6" width="1" height="1" fill="#e3b341"/>
+    <rect x="5" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  permission: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="2" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="4" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="4" width="1" height="1" fill="#0d1117"/>
+    <!-- question mark mouth -->
+    <rect x="7" y="6" width="2" height="1" fill="#e3b341"/>
+    <!-- speech bubble with ? -->
+    <rect x="0" y="0" width="5" height="4" rx="1" fill="#e3b341" opacity="0.9"/>
+    <rect x="2" y="1" width="1" height="2" fill="#0d1117"/>
+    <rect x="2" y="0" width="1" height="1" fill="#0d1117"/>
+    <rect x="4" y="4" width="1" height="1" fill="#e3b341" opacity="0.9"/>
+    <rect x="4" y="8" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <rect x="3" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="11" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="5" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  juggling: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="2" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="4" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="4" width="1" height="1" fill="#0d1117"/>
+    <rect x="7" y="6" width="2" height="1" fill="#0d1117"/>
+    <rect x="4" y="8" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <!-- arms up juggling -->
+    <rect x="1" y="7" width="4" height="2" rx="1" fill="#76B900"/>
+    <rect x="11" y="7" width="4" height="2" rx="1" fill="#76B900"/>
+    <!-- balls -->
+    <rect x="1" y="4" width="2" height="2" rx="1" fill="#bc8cff"/>
+    <rect x="13" y="3" width="2" height="2" rx="1" fill="#bc8cff"/>
+    <rect x="7" y="1" width="2" height="2" rx="1" fill="#58a6ff"/>
+    <rect x="5" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  conducting: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="1" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="3" width="1" height="1" fill="#bc8cff"/>
+    <rect x="9" y="3" width="1" height="1" fill="#bc8cff"/>
+    <rect x="7" y="5" width="2" height="1" fill="#0d1117"/>
+    <rect x="4" y="7" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <!-- baton arm -->
+    <rect x="11" y="5" width="2" height="5" rx="1" fill="#76B900"/>
+    <rect x="11" y="4" width="3" height="2" rx="1" fill="#e3b341"/>
+    <rect x="2" y="9" width="3" height="2" rx="1" fill="#76B900"/>
+    <!-- music notes -->
+    <rect x="1" y="5" width="1" height="1" fill="#bc8cff"/>
+    <rect x="3" y="3" width="1" height="1" fill="#bc8cff"/>
+    <rect x="14" y="7" width="1" height="1" fill="#bc8cff"/>
+    <rect x="5" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  sweeping: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="1" width="6" height="6" rx="1" fill="#76B900"/>
+    <rect x="6" y="3" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="3" width="1" height="1" fill="#0d1117"/>
+    <rect x="7" y="5" width="2" height="1" fill="#0d1117"/>
+    <rect x="4" y="7" width="8" height="5" rx="1" fill="#4d7a00"/>
+    <!-- broom arm -->
+    <rect x="11" y="7" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="12" y="8" width="1" height="5" fill="#8b949e"/>
+    <rect x="11" y="12" width="4" height="1" fill="#6e7681"/>
+    <!-- dust particles -->
+    <rect x="1" y="13" width="1" height="1" fill="#58a6ff" opacity="0.5"/>
+    <rect x="3" y="14" width="1" height="1" fill="#58a6ff" opacity="0.4"/>
+    <rect x="5" y="13" width="1" height="1" fill="#58a6ff" opacity="0.3"/>
+    <rect x="3" y="9" width="2" height="3" rx="1" fill="#76B900"/>
+    <rect x="5" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="12" width="2" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+
+  carrying: `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" class="pet-svg">
+    <rect x="5" y="1" width="6" height="5" rx="1" fill="#76B900"/>
+    <rect x="6" y="3" width="1" height="1" fill="#0d1117"/>
+    <rect x="9" y="3" width="1" height="1" fill="#0d1117"/>
+    <rect x="7" y="4" width="2" height="1" fill="#0d1117"/>
+    <!-- box being carried -->
+    <rect x="3" y="6" width="10" height="7" rx="1" fill="#f8954a"/>
+    <rect x="4" y="7" width="8" height="5" fill="#d4742a"/>
+    <rect x="7" y="6" width="2" height="7" fill="#f8954a"/>
+    <rect x="6" y="9" width="4" height="1" fill="#e3b341"/>
+    <!-- legs below box -->
+    <rect x="5" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <rect x="9" y="13" width="2" height="2" rx="1" fill="#76B900"/>
+    <!-- arms under box -->
+    <rect x="1" y="9" width="3" height="2" rx="1" fill="#76B900"/>
+    <rect x="12" y="9" width="3" height="2" rx="1" fill="#76B900"/>
+  </svg>`,
+};
+
+// LED color per state (matches firmware RGBLed behavior)
+const LED_COLORS = {
+  idle:       { color: '#ffffff', opacity: 0.3, pulse: false },
+  sleeping:   { color: '#000000', opacity: 0,   pulse: false },
+  thinking:   { color: '#58a6ff', opacity: 0.8,  pulse: true },
+  typing:     { color: '#76B900', opacity: 1.0,  pulse: false },
+  building:   { color: '#76B900', opacity: 1.0,  pulse: true },
+  juggling:   { color: '#bc8cff', opacity: 0.8,  pulse: true },
+  conducting: { color: '#bc8cff', opacity: 1.0,  pulse: false },
+  error:      { color: '#f85149', opacity: 1.0,  pulse: true },
+  attention:  { color: '#e3b341', opacity: 1.0,  pulse: false },
+  permission: { color: '#e3b341', opacity: 1.0,  pulse: true },
+  sweeping:   { color: '#58a6ff', opacity: 0.8,  pulse: true },
+  carrying:   { color: '#f8954a', opacity: 0.9,  pulse: true },
+};
+
+// I18n keys for page labels
+const PAGE_LABELS = {
+  en: {
+    agent_status: 'Agent Status',
+    device_info: 'Device Info',
+    wifi_setup: 'WiFi Setup',
+    desc_wifi: 'Connect to network',
+    dev_config: 'Device Config',
+    desc_config: 'LED, sound, display',
+    ip: 'IP', mac: 'MAC', wifi: 'WiFi', battery: 'Battery',
+    heap: 'Free Heap', uptime: 'Uptime',
+    tagline: 'AI Agent Desktop Companion',
+    hook_setup: 'Hook Setup',
+    desc_hook: 'Connect your AI agent',
+    modal_title: 'Connect Your AI Agent',
+    modal_subtitle: 'Copy the prompt below and paste it to your AI coding assistant',
+    claude_desc: 'Copy this prompt and paste it into Claude Code (or any AI coding assistant). It will configure the hooks automatically.',
+  },
+  zh: {
+    agent_status: 'Agent 状态',
+    device_info: '设备信息',
+    wifi_setup: 'WiFi 配置',
+    desc_wifi: '连接到网络',
+    dev_config: '设备设置',
+    desc_config: 'LED、声音、显示',
+    ip: 'IP 地址', mac: 'MAC 地址', wifi: 'WiFi', battery: '电池',
+    heap: '可用内存', uptime: '运行时间',
+    tagline: 'AI Agent 桌面伴侣',
+    hook_setup: 'Hook 配置',
+    desc_hook: '连接你的 AI 编程助手',
+    modal_title: '连接你的 AI 助手',
+    modal_subtitle: '复制下面的内容，粘贴给你的 AI 编程助手，让它自己完成配置',
+    claude_desc: '复制以下 Prompt，粘贴到 Claude Code（或任何 AI 编程助手）中，它会自动完成 Hook 配置。',
+  }
+};
+
+function applyPageLabels() {
+  const L = PAGE_LABELS[currentLang] || PAGE_LABELS.en;
+  setText('lbl-agent-status', L.agent_status);
+  setText('lbl-device-info', L.device_info);
+  setText('lbl-wifi-setup', L.wifi_setup);
+  setText('desc-wifi-setup', L.desc_wifi);
+  setText('lbl-dev-config', L.dev_config);
+  setText('desc-dev-config', L.desc_config);
+  setText('lbl-ip', L.ip);
+  setText('lbl-mac', L.mac);
+  setText('lbl-wifi', L.wifi);
+  setText('lbl-battery', L.battery);
+  setText('lbl-heap', L.heap);
+  setText('lbl-uptime', L.uptime);
+  setText('tagline', L.tagline);
+  setText('lbl-hook-setup', L.hook_setup || 'Hook Setup');
+  setText('desc-hook-setup', L.desc_hook || 'Connect your AI agent');
+  setText('modal-title', L.modal_title || 'Connect Your AI Agent');
+  setText('modal-subtitle', L.modal_subtitle || 'Copy the prompt below and paste it to your AI coding assistant');
+  setText('claude-desc', L.claude_desc || '');
+}
+
+function setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+}
+
+// Current device state
+let deviceState = {
+  state: null,
+  agent: null,
+  tool: null,
+  file: null,
+  sessions: 0,
+};
+
+let deviceInfo = {
+  ip: '--', mac: '--', ssid: '--', rssi: -100,
+  heap: 0, uptime: 0, version: '--',
+  battery_percent: 0, battery_voltage: 0, charging: false,
+};
+
+let uptimeTimer = null;
+let uptimeBase = 0;
+let uptimeTimestamp = 0;
+
+function renderState() {
+  const s = deviceState.state || 'idle';
+  const stateEl = document.getElementById('state-name');
+  const agentEl = document.getElementById('state-agent');
+  const toolEl  = document.getElementById('state-tool');
+  const cardEl  = document.getElementById('state-card');
+  const ledRing = document.getElementById('led-ring');
+  const petArt  = document.getElementById('pet-art');
+  const sessEl  = document.getElementById('sessions-pill');
+  const sessCount = document.getElementById('sessions-count');
+
+  // State label
+  stateEl.textContent = t('state_' + s) || s;
+  stateEl.style.color = stateColor(s);
+
+  // Active / inactive card glow
+  cardEl.classList.toggle('active', !['idle','sleeping'].includes(s));
+
+  // Agent name
+  if (deviceState.agent) {
+    agentEl.textContent = deviceState.agent;
+  } else {
+    agentEl.textContent = t('no_agent');
+  }
+
+  // Tool / file info
+  const toolInfo = [deviceState.tool, deviceState.file].filter(Boolean).join(' → ');
+  toolEl.textContent = toolInfo || '';
+
+  // LED ring preview
+  const led = LED_COLORS[s] || LED_COLORS.idle;
+  ledRing.style.background = led.color;
+  ledRing.style.opacity = led.opacity;
+  if (led.pulse) {
+    ledRing.style.animation = 'dot-blink 1s ease-in-out infinite';
+    ledRing.style.boxShadow = `0 0 8px ${led.color}`;
+  } else {
+    ledRing.style.animation = 'none';
+    ledRing.style.boxShadow = `0 0 4px ${led.color}`;
+  }
+
+  // Pixel art
+  petArt.innerHTML = PIXEL_ART[s] || PIXEL_ART.idle;
+
+  // Sessions pill
+  if (deviceState.sessions > 0) {
+    sessEl.style.display = 'inline-flex';
+    sessCount.textContent = deviceState.sessions;
+  } else {
+    sessEl.style.display = 'none';
+  }
+}
+
+function renderDeviceInfo() {
+  const info = deviceInfo;
+  document.getElementById('dev-ip').textContent = info.ip || '--';
+  document.getElementById('dev-mac').textContent = info.mac || '--';
+  document.getElementById('firmware-ver').textContent = 'v' + (info.version || '--');
+  document.getElementById('footer-hw').textContent = 'EleksCava Gen2';
+
+  // WiFi with signal bars
+  const wifiEl = document.getElementById('dev-wifi');
+  if (info.ssid && info.ssid !== '--') {
+    wifiEl.innerHTML = `${signalBarsHTML(info.rssi)} <span class="mono" style="margin-left:4px">${info.ssid}</span>`;
+  } else {
+    wifiEl.textContent = '--';
+  }
+
+  // Battery
+  const battEl = document.getElementById('dev-battery');
+  if (info.battery_percent !== undefined) {
+    battEl.innerHTML = batteryHTML(info.battery_percent, info.charging);
+  }
+
+  // Heap
+  document.getElementById('dev-heap').textContent = formatHeap(info.heap);
+}
+
+// Uptime ticks every second locally
+function startUptimeTick() {
+  if (uptimeTimer) clearInterval(uptimeTimer);
+  uptimeTimer = setInterval(() => {
+    const elapsed = (Date.now() - uptimeTimestamp) / 1000;
+    document.getElementById('dev-uptime').textContent =
+      formatUptime(Math.floor(uptimeBase + elapsed));
+  }, 1000);
+}
+
+// --- HTTP fallback: poll device info every 30s if WS disconnected ---
+let pollTimer = null;
+
+async function fetchDeviceInfo() {
+  const r = await fetchJSON('/api/device/info');
+  if (r.ok && r.data) {
+    Object.assign(deviceInfo, r.data);
+    uptimeBase = r.data.uptime || 0;
+    uptimeTimestamp = Date.now();
+    renderDeviceInfo();
+    startUptimeTick();
+  }
+}
+
+async function fetchAgentStatus() {
+  const r = await fetchJSON('/api/agent/status');
+  if (r.ok && r.data) {
+    deviceState.state    = r.data.state;
+    deviceState.agent    = r.data.agent || null;
+    deviceState.tool     = r.data.tool || null;
+    deviceState.file     = r.data.file || null;
+    deviceState.sessions = r.data.active_sessions || 0;
+    renderState();
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  fetchDeviceInfo();
+  fetchAgentStatus();
+  pollTimer = setInterval(() => {
+    fetchDeviceInfo();
+    fetchAgentStatus();
+  }, 30000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// --- WebSocket Handlers ---
+WS.on('deviceInfo', function(msg) {
+  deviceInfo.ip      = msg.ip || deviceInfo.ip;
+  deviceInfo.mac     = msg.mac || deviceInfo.mac;
+  deviceInfo.ssid    = msg.ssid || deviceInfo.ssid;
+  deviceInfo.rssi    = msg.rssi !== undefined ? msg.rssi : deviceInfo.rssi;
+  deviceInfo.heap    = msg.heap || deviceInfo.heap;
+  deviceInfo.version = msg.version || deviceInfo.version;
+  uptimeBase = msg.uptime || 0;
+  uptimeTimestamp = Date.now();
+
+  deviceState.state    = msg.state || 'idle';
+  deviceState.sessions = msg.active_sessions || 0;
+
+  renderDeviceInfo();
+  renderState();
+  startUptimeTick();
+});
+
+WS.on('stateUpdate', function(msg) {
+  deviceState.state    = msg.state || 'idle';
+  deviceState.agent    = msg.agent || null;
+  deviceState.tool     = msg.tool || null;
+  deviceState.sessions = msg.active_sessions || 0;
+  renderState();
+});
+
+WS.on('pong', function() {
+  // Connection alive — nothing needed
+});
+
+// --- Hook Setup Modal ---
+function getDeviceURL() {
+  return 'http://' + (deviceInfo.ip && deviceInfo.ip !== '--' ? deviceInfo.ip : location.host);
+}
+
+function openHookSetup() {
+  const url = getDeviceURL();
+  const ep = url + '/api/agent/state';
+
+  // Claude Code prompt (user pastes this into Claude Code CLI)
+  document.getElementById('claude-prompt').textContent =
+`Please configure InksPet hooks in my ~/.claude/settings.json to send agent state events to my InksPet device.
+
+Device API endpoint: ${ep}
+
+Add these hooks to the "hooks" section of ~/.claude/settings.json (merge with existing hooks, don't replace them):
+
+- UserPromptSubmit: POST to ${ep} with {"agent":"claude-code","event":"UserPromptSubmit"}
+- PreToolUse: POST to ${ep} with {"agent":"claude-code","event":"PreToolUse","tool":"<tool_name>"} — extract tool_name from stdin JSON .tool_name field
+- PostToolUse: POST to ${ep} with {"agent":"claude-code","event":"PostToolUse"}
+- Stop: POST to ${ep} with {"agent":"claude-code","event":"Stop"}
+
+Each hook should:
+- Use curl with -s flag and 3 second timeout
+- End with 2>/dev/null || true to avoid blocking if device is offline
+- PreToolUse hook should extract tool name from stdin via jq
+
+After configuring, verify the JSON is valid with jq.`;
+
+  // Universal prompt (works with any AI assistant)
+  document.getElementById('universal-prompt').textContent =
+`I have an InksPet device (AI agent monitor) on my local network. Please configure your hook/webhook system to send HTTP POST events to my device so it can display your working status in real-time.
+
+Device API endpoint: ${ep}
+
+Send a POST request with Content-Type: application/json for each of these events:
+
+1. When I submit a prompt to you:
+   {"agent":"<your_name>","event":"UserPromptSubmit"}
+
+2. Before you use any tool (read file, edit, run command, etc):
+   {"agent":"<your_name>","event":"PreToolUse","tool":"<tool_name>"}
+
+3. After you finish using a tool:
+   {"agent":"<your_name>","event":"PostToolUse"}
+
+4. When you finish responding:
+   {"agent":"<your_name>","event":"Stop"}
+
+Replace <your_name> with your tool's name (e.g. "copilot", "cursor", "codex").
+Replace <tool_name> with the actual tool being used.
+
+Use a 3-second timeout and fail silently if device is unreachable.
+
+Please configure this now using whatever hook/webhook mechanism your tool supports.`;
+
+  // Manual JSON for Claude Code settings.json
+  document.getElementById('manual-json').textContent = JSON.stringify({
+    "hooks": {
+      "UserPromptSubmit": [{
+        "hooks": [{
+          "type": "command",
+          "command": "curl -s -m 3 -X POST " + ep + " -H 'Content-Type: application/json' -d '{\"agent\":\"claude-code\",\"event\":\"UserPromptSubmit\"}' 2>/dev/null || true",
+          "timeout": 3
+        }]
+      }],
+      "PreToolUse": [{
+        "matcher": "*",
+        "hooks": [{
+          "type": "command",
+          "command": "jq -r '.tool_name // empty' | { read -r t; curl -s -m 3 -X POST " + ep + " -H 'Content-Type: application/json' -d \"{\\\"agent\\\":\\\"claude-code\\\",\\\"event\\\":\\\"PreToolUse\\\",\\\"tool\\\":\\\"$t\\\"}\" 2>/dev/null || true; }",
+          "timeout": 3
+        }]
+      }],
+      "PostToolUse": [{
+        "matcher": "*",
+        "hooks": [{
+          "type": "command",
+          "command": "curl -s -m 3 -X POST " + ep + " -H 'Content-Type: application/json' -d '{\"agent\":\"claude-code\",\"event\":\"PostToolUse\"}' 2>/dev/null || true",
+          "timeout": 3
+        }]
+      }],
+      "Stop": [{
+        "hooks": [{
+          "type": "command",
+          "command": "curl -s -m 3 -X POST " + ep + " -H 'Content-Type: application/json' -d '{\"agent\":\"claude-code\",\"event\":\"Stop\"}' 2>/dev/null || true",
+          "timeout": 3
+        }]
+      }]
+    }
+  }, null, 2);
+
+  // API endpoints display
+  document.getElementById('api-endpoint').textContent = ep;
+  document.getElementById('api-status').textContent = url + '/api/agent/status';
+
+  document.getElementById('hook-modal').style.display = 'block';
+}
+
+function closeHookSetup() {
+  document.getElementById('hook-modal').style.display = 'none';
+}
+
+function showHookTab(tab) {
+  document.querySelectorAll('.hook-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.hook-pane').forEach(p => p.style.display = 'none');
+  event.target.classList.add('active');
+  document.getElementById('pane-' + tab).style.display = 'block';
+}
+
+function copyBlock(id) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('#' + id + ' ~ button, [onclick*="' + id + '"]');
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'COPIED!';
+      btn.style.background = '#27c93f';
+      setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
+    }
+    showMessage('Copied to clipboard!', 'success');
+  }).catch(() => {
+    // Fallback: select text
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById(id));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    showMessage('Text selected. Press Ctrl+C to copy.', 'info');
+  });
+}
+
+// Close modal on backdrop click
+document.addEventListener('click', function(e) {
+  const modal = document.getElementById('hook-modal');
+  if (e.target === modal) closeHookSetup();
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeHookSetup();
+});
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', function() {
+  applyPageLabels();
+  renderState(); // show defaults
+
+  // Init WebSocket
+  WS.init(
+    document.getElementById('conn-dot'),
+    document.getElementById('conn-label')
+  );
+
+  // Fallback HTTP polling (also runs immediately)
+  startPolling();
+});
+
+// Re-apply labels on language change
+document.addEventListener('langchange', function() {
+  applyPageLabels();
+  renderState();
+});
+</script>
+</body>
+</html>

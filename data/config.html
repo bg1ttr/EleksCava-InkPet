@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>InksPet — Device Config</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* Config page specific styles */
+
+/* Section groups */
+.config-section {
+  margin-bottom: 8px;
+}
+
+.section-save-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* Inline label+control row */
+.config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+  gap: 16px;
+}
+.config-row:last-of-type { border-bottom: none; }
+
+.config-row-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-row-title {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.config-row-desc {
+  font-size: 11px;
+  color: var(--text-sec);
+  margin-top: 1px;
+}
+
+.config-row-control {
+  flex-shrink: 0;
+}
+
+.config-row-control .form-input {
+  width: auto;
+  min-width: 140px;
+}
+
+/* Full-width input for text fields */
+.config-row-full {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+  gap: 6px;
+}
+.config-row-full:last-of-type { border-bottom: none; }
+
+/* Firmware info box */
+.fw-info-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.fw-info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fw-info-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.fw-info-value {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Save button spin on loading */
+.save-btn.saving {
+  pointer-events: none;
+}
+
+/* Reset danger zone */
+.danger-zone {
+  border-color: rgba(248,81,73,0.3);
+}
+
+.danger-zone .card-title .dot {
+  background: var(--danger);
+}
+
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-sec);
+  flex-wrap: wrap;
+}
+
+.breadcrumb a {
+  color: var(--text-sec);
+  text-decoration: none;
+}
+.breadcrumb a:hover { color: var(--text); }
+
+.breadcrumb-sep { color: var(--text-dim); }
+
+/* Range slider for brightness */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  transition: box-shadow var(--transition);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+/* Timezone numeric input */
+.tz-input {
+  width: 80px;
+  text-align: center;
+}
+
+/* Unsaved changes indicator */
+.unsaved-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+  margin-left: 4px;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.unsaved-dot.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- Reset Confirmation Modal -->
+<div class="modal-overlay hidden" id="reset-modal">
+  <div class="modal">
+    <div class="modal-title" id="lbl-reset-title">Factory Reset</div>
+    <div class="modal-body" id="lbl-reset-body">
+      This will restore all settings to defaults. WiFi credentials will be cleared and the device will restart in AP mode. Are you sure?
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeResetModal()" id="lbl-cancel">Cancel</button>
+      <button class="btn btn-danger" onclick="doFactoryReset()" id="lbl-confirm-reset">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div>
+        <div class="breadcrumb">
+          <a href="index.html">InksPet</a>
+          <span class="breadcrumb-sep">›</span>
+          <span id="lbl-page-title">Device Config</span>
+        </div>
+        <div style="margin-top:4px;font-size:18px;font-weight:700;color:var(--text)" id="lbl-page-heading">Configuration</div>
+      </div>
+      <div class="lang-toggle">
+        <button class="lang-btn active" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="zh">中</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Loading indicator -->
+  <div id="loading-bar" class="progress-bar" style="margin-bottom:16px">
+    <div class="progress-fill" id="loading-fill" style="width:0%"></div>
+  </div>
+
+  <!-- ========== LED SETTINGS ========== -->
+  <div class="card config-section" id="section-led">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:#e3b341"></span>
+        <span id="lbl-led-title">LED Settings</span>
+        <span class="unsaved-dot" id="led-unsaved"></span>
+      </span>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-led-brightness">Brightness</div>
+        <div class="config-row-desc" id="desc-led-brightness">WS2812 LED intensity</div>
+      </div>
+      <div class="config-row-control">
+        <select class="form-input form-select" id="cfg-led-brightness" onchange="markUnsaved('led-unsaved')">
+          <option value="0" id="opt-off">Off</option>
+          <option value="1" id="opt-low">Low</option>
+          <option value="2" id="opt-medium">Medium</option>
+          <option value="3" id="opt-high">High</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section-save-row">
+      <button class="btn btn-primary btn-sm save-btn" id="save-led-btn" onclick="saveSection('led')">
+        <span id="save-led-label">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== SOUND SETTINGS ========== -->
+  <div class="card config-section" id="section-sound">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:var(--purple)"></span>
+        <span id="lbl-sound-title">Sound Settings</span>
+        <span class="unsaved-dot" id="sound-unsaved"></span>
+      </span>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-buzzer-enabled">Buzzer</div>
+        <div class="config-row-desc" id="desc-buzzer-enabled">Enable sound notifications</div>
+      </div>
+      <div class="config-row-control">
+        <label class="toggle">
+          <input type="checkbox" id="cfg-buzzer-enabled" onchange="markUnsaved('sound-unsaved')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-buzzer-volume">Volume</div>
+        <div class="config-row-desc" id="desc-buzzer-volume">Notification volume level</div>
+      </div>
+      <div class="config-row-control">
+        <select class="form-input form-select" id="cfg-buzzer-volume" onchange="markUnsaved('sound-unsaved')">
+          <option value="1" id="opt-vol-low">Low</option>
+          <option value="2" id="opt-vol-med">Medium</option>
+          <option value="3" id="opt-vol-high">High</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section-save-row">
+      <button class="btn btn-primary btn-sm save-btn" id="save-sound-btn" onclick="saveSection('sound')">
+        <span id="save-sound-label">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== PERMISSION SETTINGS ========== -->
+  <div class="card config-section" id="section-permission">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:var(--warn)"></span>
+        <span id="lbl-perm-title">Permission Settings</span>
+        <span class="unsaved-dot" id="perm-unsaved"></span>
+      </span>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-perm-timeout">Auto-Deny Timeout</div>
+        <div class="config-row-desc" id="desc-perm-timeout">Auto-deny after this time</div>
+      </div>
+      <div class="config-row-control">
+        <select class="form-input form-select" id="cfg-permission-timeout" onchange="markUnsaved('perm-unsaved')">
+          <option value="30" id="opt-t30">30s</option>
+          <option value="60" id="opt-t60">60s</option>
+          <option value="120" id="opt-t120">120s</option>
+          <option value="0" id="opt-tnever">Never</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-perm-default">Default Action</div>
+        <div class="config-row-desc" id="desc-perm-default">Action when timeout expires</div>
+      </div>
+      <div class="config-row-control">
+        <select class="form-input form-select" id="cfg-permission-default" onchange="markUnsaved('perm-unsaved')">
+          <option value="deny" id="opt-deny">Deny</option>
+          <option value="allow" id="opt-allow">Allow</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section-save-row">
+      <button class="btn btn-primary btn-sm save-btn" id="save-perm-btn" onclick="saveSection('permission')">
+        <span id="save-perm-label">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== DISPLAY SETTINGS ========== -->
+  <div class="card config-section" id="section-display">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:var(--info)"></span>
+        <span id="lbl-disp-title">Display Settings</span>
+        <span class="unsaved-dot" id="disp-unsaved"></span>
+      </span>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-sleep-timeout">Sleep Timeout</div>
+        <div class="config-row-desc" id="desc-sleep-timeout">Time before display sleeps</div>
+      </div>
+      <div class="config-row-control">
+        <select class="form-input form-select" id="cfg-sleep-timeout" onchange="markUnsaved('disp-unsaved')">
+          <option value="30" id="opt-s30">30s</option>
+          <option value="60" id="opt-s60">60s</option>
+          <option value="120" id="opt-s120">120s</option>
+          <option value="300" id="opt-s300">5 min</option>
+          <option value="0" id="opt-snever">Never</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-dnd-mode">DND Mode</div>
+        <div class="config-row-desc" id="desc-dnd-mode">Disable buzzer and LED flashing</div>
+      </div>
+      <div class="config-row-control">
+        <label class="toggle">
+          <input type="checkbox" id="cfg-dnd-mode" onchange="markUnsaved('disp-unsaved')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section-save-row">
+      <button class="btn btn-primary btn-sm save-btn" id="save-disp-btn" onclick="saveSection('display')">
+        <span id="save-disp-label">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== NETWORK SETTINGS ========== -->
+  <div class="card config-section" id="section-network">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:var(--success)"></span>
+        <span id="lbl-net-title">Network Settings</span>
+        <span class="unsaved-dot" id="net-unsaved"></span>
+      </span>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-timezone">Timezone</div>
+        <div class="config-row-desc" id="desc-timezone">UTC offset (-12 to +12)</div>
+      </div>
+      <div class="config-row-control">
+        <input type="number"
+               id="cfg-timezone"
+               class="form-input tz-input"
+               min="-12" max="12" step="1"
+               onchange="markUnsaved('net-unsaved')"
+               oninput="markUnsaved('net-unsaved')">
+      </div>
+    </div>
+
+    <div class="config-row-full">
+      <label class="form-label" for="cfg-ntp-server" id="lbl-ntp">NTP Server</label>
+      <input type="text"
+             id="cfg-ntp-server"
+             class="form-input"
+             placeholder="pool.ntp.org"
+             autocomplete="off"
+             autocorrect="off"
+             autocapitalize="none"
+             onchange="markUnsaved('net-unsaved')"
+             oninput="markUnsaved('net-unsaved')">
+    </div>
+
+    <div class="config-row-full">
+      <label class="form-label" for="cfg-mdns-hostname" id="lbl-mdns">mDNS Hostname</label>
+      <input type="text"
+             id="cfg-mdns-hostname"
+             class="form-input"
+             placeholder="inkspet"
+             autocomplete="off"
+             autocorrect="off"
+             autocapitalize="none"
+             onchange="markUnsaved('net-unsaved')"
+             oninput="markUnsaved('net-unsaved')">
+      <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono)">
+        Access via: <span id="mdns-preview" style="color:var(--accent)">inkspet.local</span>
+      </div>
+    </div>
+
+    <div class="section-save-row">
+      <button class="btn btn-primary btn-sm save-btn" id="save-net-btn" onclick="saveSection('network')">
+        <span id="save-net-label">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== SYSTEM ========== -->
+  <div class="card config-section danger-zone">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot"></span>
+        <span id="lbl-sys-title">System</span>
+      </span>
+    </div>
+
+    <!-- Firmware info -->
+    <div class="fw-info-box" id="fw-info-box">
+      <div class="fw-info-row">
+        <span class="fw-info-label" id="lbl-fw-version">Firmware</span>
+        <span class="fw-info-value" id="fw-version">--</span>
+      </div>
+      <div class="fw-info-row">
+        <span class="fw-info-label" id="lbl-hw-platform">Hardware</span>
+        <span class="fw-info-value" id="hw-platform">--</span>
+      </div>
+      <div class="fw-info-row">
+        <span class="fw-info-label" id="lbl-free-heap">Free Heap</span>
+        <span class="fw-info-value" id="sys-heap">--</span>
+      </div>
+      <div class="fw-info-row">
+        <span class="fw-info-label" id="lbl-uptime">Uptime</span>
+        <span class="fw-info-value" id="sys-uptime">--</span>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(248,81,73,0.2)">
+      <div style="margin-bottom:10px">
+        <div class="config-row-title" style="color:var(--danger)" id="lbl-factory-reset">Factory Reset</div>
+        <div class="config-row-desc" id="desc-factory-reset">
+          Clears all settings and WiFi credentials. Device will restart in AP mode.
+        </div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="openResetModal()">
+        <span id="lbl-reset-btn">⚠ Factory Reset</span>
+      </button>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-bottom:8px">
+    <a href="index.html" class="back-link">&#8592; <span id="lbl-back">Back to Dashboard</span></a>
+  </div>
+
+  <footer class="footer">
+    InksPet by <a href="https://elekscava.com" target="_blank">EleksCava</a>
+  </footer>
+
+</div><!-- /container -->
+
+<script src="script.js"></script>
+<script>
+/* =====================================================
+   Device Config page logic
+   ===================================================== */
+
+const PAGE_LABELS = {
+  en: {
+    page_title: 'Device Config',
+    page_heading: 'Configuration',
+    back: 'Back to Dashboard',
+    save: 'Save',
+    saved: 'Saved ✓',
+    saving: 'Saving...',
+    save_ok: 'Settings saved',
+    save_fail: 'Save failed',
+    // LED
+    led_title: 'LED Settings',
+    led_brightness: 'Brightness',
+    desc_led: 'WS2812 LED intensity',
+    opt_off: 'Off', opt_low: 'Low', opt_medium: 'Medium', opt_high: 'High',
+    // Sound
+    sound_title: 'Sound Settings',
+    buzzer_enabled: 'Buzzer',
+    desc_buzzer: 'Enable sound notifications',
+    buzzer_volume: 'Volume',
+    desc_volume: 'Notification volume level',
+    opt_vol_low: 'Low', opt_vol_med: 'Medium', opt_vol_high: 'High',
+    // Permission
+    perm_title: 'Permission Settings',
+    perm_timeout: 'Auto-Deny Timeout',
+    desc_perm_timeout: 'Auto-deny after this time',
+    perm_default: 'Default Action',
+    desc_perm_default: 'Action when timeout expires',
+    opt_deny: 'Deny', opt_allow: 'Allow',
+    opt_t30: '30s', opt_t60: '60s', opt_t120: '120s', opt_never: 'Never',
+    // Display
+    disp_title: 'Display Settings',
+    sleep_timeout: 'Sleep Timeout',
+    desc_sleep: 'Time before display sleeps',
+    dnd_mode: 'DND Mode',
+    desc_dnd: 'Disable buzzer and LED flashing',
+    opt_s30: '30s', opt_s60: '60s', opt_s120: '120s', opt_s300: '5 min', opt_snever: 'Never',
+    // Network
+    net_title: 'Network Settings',
+    timezone: 'Timezone',
+    desc_tz: 'UTC offset (-12 to +12)',
+    ntp: 'NTP Server',
+    mdns: 'mDNS Hostname',
+    // System
+    sys_title: 'System',
+    fw_version: 'Firmware',
+    hw_platform: 'Hardware',
+    free_heap: 'Free Heap',
+    uptime_label: 'Uptime',
+    factory_reset: 'Factory Reset',
+    desc_reset: 'Clears all settings and WiFi credentials. Device will restart in AP mode.',
+    reset_btn: '⚠ Factory Reset',
+    // Modal
+    reset_title: 'Factory Reset',
+    reset_body: 'This will restore all settings to defaults. WiFi credentials will be cleared and the device will restart in AP mode. Are you sure?',
+    cancel: 'Cancel',
+    confirm_reset: 'Reset',
+    reset_ok: 'Resetting...',
+  },
+  zh: {
+    page_title: '设备配置',
+    page_heading: '配置',
+    back: '返回仪表盘',
+    save: '保存',
+    saved: '已保存 ✓',
+    saving: '保存中...',
+    save_ok: '设置已保存',
+    save_fail: '保存失败',
+    led_title: 'LED 设置',
+    led_brightness: '亮度',
+    desc_led: 'WS2812 LED 强度',
+    opt_off: '关闭', opt_low: '低', opt_medium: '中', opt_high: '高',
+    sound_title: '声音设置',
+    buzzer_enabled: '蜂鸣器',
+    desc_buzzer: '启用声音通知',
+    buzzer_volume: '音量',
+    desc_volume: '通知音量级别',
+    opt_vol_low: '低', opt_vol_med: '中', opt_vol_high: '高',
+    perm_title: '权限设置',
+    perm_timeout: '自动拒绝超时',
+    desc_perm_timeout: '超时后自动拒绝',
+    perm_default: '默认操作',
+    desc_perm_default: '超时时的操作',
+    opt_deny: '拒绝', opt_allow: '允许',
+    opt_t30: '30秒', opt_t60: '60秒', opt_t120: '120秒', opt_never: '永不',
+    disp_title: '显示设置',
+    sleep_timeout: '休眠超时',
+    desc_sleep: '显示器休眠时间',
+    dnd_mode: '勿扰模式',
+    desc_dnd: '禁用蜂鸣器和 LED 闪烁',
+    opt_s30: '30秒', opt_s60: '60秒', opt_s120: '120秒', opt_s300: '5分钟', opt_snever: '永不',
+    net_title: '网络设置',
+    timezone: '时区',
+    desc_tz: 'UTC 偏移 (-12 到 +12)',
+    ntp: 'NTP 服务器',
+    mdns: 'mDNS 主机名',
+    sys_title: '系统',
+    fw_version: '固件版本',
+    hw_platform: '硬件平台',
+    free_heap: '可用内存',
+    uptime_label: '运行时间',
+    factory_reset: '恢复出厂设置',
+    desc_reset: '清除所有设置和 WiFi 凭据，设备将以 AP 模式重启。',
+    reset_btn: '⚠ 恢复出厂设置',
+    reset_title: '恢复出厂设置',
+    reset_body: '这将恢复所有设置到默认值，WiFi 凭据将被清除，设备将以 AP 模式重启。确定吗？',
+    cancel: '取消',
+    confirm_reset: '重置',
+    reset_ok: '重置中...',
+  }
+};
+
+function L(key) {
+  const map = PAGE_LABELS[currentLang] || PAGE_LABELS.en;
+  return map[key] || PAGE_LABELS.en[key] || key;
+}
+
+function applyLabels() {
+  setText('lbl-page-title', L('page_title'));
+  setText('lbl-page-heading', L('page_heading'));
+  setText('lbl-back', L('back'));
+  // LED
+  setText('lbl-led-title', L('led_title'));
+  setText('lbl-led-brightness', L('led_brightness'));
+  setText('desc-led-brightness', L('desc_led'));
+  setText('opt-off', L('opt_off'));
+  setText('opt-low', L('opt_low'));
+  setText('opt-medium', L('opt_medium'));
+  setText('opt-high', L('opt_high'));
+  setText('save-led-label', L('save'));
+  // Sound
+  setText('lbl-sound-title', L('sound_title'));
+  setText('lbl-buzzer-enabled', L('buzzer_enabled'));
+  setText('desc-buzzer-enabled', L('desc_buzzer'));
+  setText('lbl-buzzer-volume', L('buzzer_volume'));
+  setText('desc-buzzer-volume', L('desc_volume'));
+  setText('opt-vol-low', L('opt_vol_low'));
+  setText('opt-vol-med', L('opt_vol_med'));
+  setText('opt-vol-high', L('opt_vol_high'));
+  setText('save-sound-label', L('save'));
+  // Permission
+  setText('lbl-perm-title', L('perm_title'));
+  setText('lbl-perm-timeout', L('perm_timeout'));
+  setText('desc-perm-timeout', L('desc_perm_timeout'));
+  setText('lbl-perm-default', L('perm_default'));
+  setText('desc-perm-default', L('desc_perm_default'));
+  setText('opt-t30', L('opt_t30'));
+  setText('opt-t60', L('opt_t60'));
+  setText('opt-t120', L('opt_t120'));
+  setText('opt-tnever', L('opt_never'));
+  setText('opt-deny', L('opt_deny'));
+  setText('opt-allow', L('opt_allow'));
+  setText('save-perm-label', L('save'));
+  // Display
+  setText('lbl-disp-title', L('disp_title'));
+  setText('lbl-sleep-timeout', L('sleep_timeout'));
+  setText('desc-sleep-timeout', L('desc_sleep'));
+  setText('lbl-dnd-mode', L('dnd_mode'));
+  setText('desc-dnd-mode', L('desc_dnd'));
+  setText('opt-s30', L('opt_s30'));
+  setText('opt-s60', L('opt_s60'));
+  setText('opt-s120', L('opt_s120'));
+  setText('opt-s300', L('opt_s300'));
+  setText('opt-snever', L('opt_snever'));
+  setText('save-disp-label', L('save'));
+  // Network
+  setText('lbl-net-title', L('net_title'));
+  setText('lbl-timezone', L('timezone'));
+  setText('desc-timezone', L('desc_tz'));
+  setText('lbl-ntp', L('ntp'));
+  setText('lbl-mdns', L('mdns'));
+  setText('save-net-label', L('save'));
+  // System
+  setText('lbl-sys-title', L('sys_title'));
+  setText('lbl-fw-version', L('fw_version'));
+  setText('lbl-hw-platform', L('hw_platform'));
+  setText('lbl-free-heap', L('free_heap'));
+  setText('lbl-uptime', L('uptime_label'));
+  setText('lbl-factory-reset', L('factory_reset'));
+  setText('desc-factory-reset', L('desc_reset'));
+  setText('lbl-reset-btn', L('reset_btn'));
+  // Modal
+  setText('lbl-reset-title', L('reset_title'));
+  setText('lbl-reset-body', L('reset_body'));
+  setText('lbl-cancel', L('cancel'));
+  setText('lbl-confirm-reset', L('confirm_reset'));
+}
+
+function setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+}
+
+// --- Config state ---
+let cfg = {};
+
+async function loadConfig() {
+  animateLoadBar();
+  const r = await fetchJSON('/api/config');
+  if (r.ok && r.data) {
+    cfg = r.data;
+    applyConfigToForm();
+  }
+
+  // Also load device info for system section
+  const ri = await fetchJSON('/api/device/info');
+  if (ri.ok && ri.data) {
+    setText('fw-version', ri.data.version || '--');
+    setText('hw-platform', ri.data.hardware || '--');
+    setText('sys-heap', formatHeap(ri.data.heap));
+    setText('sys-uptime', formatUptime(ri.data.uptime));
+  }
+}
+
+function animateLoadBar() {
+  const fill = document.getElementById('loading-fill');
+  let w = 0;
+  const timer = setInterval(() => {
+    w = Math.min(w + 15, 90);
+    fill.style.width = w + '%';
+  }, 80);
+  setTimeout(() => {
+    clearInterval(timer);
+    fill.style.width = '100%';
+    setTimeout(() => {
+      document.getElementById('loading-bar').style.display = 'none';
+    }, 300);
+  }, 800);
+}
+
+function applyConfigToForm() {
+  // LED brightness (0-3)
+  const bright = document.getElementById('cfg-led-brightness');
+  bright.value = cfg.led_brightness !== undefined ? String(cfg.led_brightness) : '2';
+
+  // Sound
+  document.getElementById('cfg-buzzer-enabled').checked = !!cfg.buzzer_enabled;
+  const vol = document.getElementById('cfg-buzzer-volume');
+  vol.value = cfg.buzzer_volume !== undefined ? String(cfg.buzzer_volume) : '2';
+
+  // Permission
+  const ptimeout = document.getElementById('cfg-permission-timeout');
+  const pdef = document.getElementById('cfg-permission-default');
+  ptimeout.value = cfg.permission_timeout !== undefined ? String(cfg.permission_timeout) : '60';
+  pdef.value = cfg.permission_default || 'deny';
+
+  // Display
+  const stimeout = document.getElementById('cfg-sleep-timeout');
+  stimeout.value = cfg.sleep_timeout !== undefined ? String(cfg.sleep_timeout) : '60';
+  document.getElementById('cfg-dnd-mode').checked = !!cfg.dnd_mode;
+
+  // Network
+  const tz = document.getElementById('cfg-timezone');
+  tz.value = cfg.timezone !== undefined ? String(cfg.timezone) : '0';
+  document.getElementById('cfg-ntp-server').value = cfg.ntp_server || 'pool.ntp.org';
+  const hostname = cfg.mdns_hostname || 'inkspet';
+  document.getElementById('cfg-mdns-hostname').value = hostname;
+  updateMdnsPreview(hostname);
+}
+
+function markUnsaved(dotId) {
+  document.getElementById(dotId).classList.add('visible');
+  // Update mDNS preview on hostname change
+  if (dotId === 'net-unsaved') {
+    const h = document.getElementById('cfg-mdns-hostname').value.trim() || 'inkspet';
+    updateMdnsPreview(h);
+  }
+}
+
+function updateMdnsPreview(hostname) {
+  const el = document.getElementById('mdns-preview');
+  if (el) el.textContent = hostname + '.local';
+}
+
+// Map section ID to fields to save
+const SECTION_FIELDS = {
+  led:        ['led_brightness'],
+  sound:      ['buzzer_enabled', 'buzzer_volume'],
+  permission: ['permission_timeout', 'permission_default'],
+  display:    ['dnd_mode', 'sleep_timeout'],
+  network:    ['timezone', 'ntp_server', 'mdns_hostname'],
+};
+
+function readFormValues() {
+  return {
+    led_brightness:    parseInt(document.getElementById('cfg-led-brightness').value, 10),
+    buzzer_enabled:    document.getElementById('cfg-buzzer-enabled').checked,
+    buzzer_volume:     parseInt(document.getElementById('cfg-buzzer-volume').value, 10),
+    permission_timeout: parseInt(document.getElementById('cfg-permission-timeout').value, 10),
+    permission_default: document.getElementById('cfg-permission-default').value,
+    dnd_mode:          document.getElementById('cfg-dnd-mode').checked,
+    sleep_timeout:     parseInt(document.getElementById('cfg-sleep-timeout').value, 10),
+    timezone:          parseInt(document.getElementById('cfg-timezone').value, 10),
+    ntp_server:        document.getElementById('cfg-ntp-server').value.trim(),
+    mdns_hostname:     document.getElementById('cfg-mdns-hostname').value.trim(),
+  };
+}
+
+async function saveSection(section) {
+  const fields = SECTION_FIELDS[section];
+  if (!fields) return;
+
+  const allValues = readFormValues();
+  const payload = {};
+  fields.forEach(f => { payload[f] = allValues[f]; });
+
+  const btnId = `save-${section === 'permission' ? 'perm' : section === 'display' ? 'disp' : section}-btn`;
+  const labelId = `save-${section === 'permission' ? 'perm' : section === 'display' ? 'disp' : section}-label`;
+  const btn = document.getElementById(btnId);
+  const label = document.getElementById(labelId);
+
+  if (btn) { btn.disabled = true; btn.classList.add('saving'); }
+  if (label) label.textContent = L('saving');
+
+  const r = await postJSON('/api/config', payload);
+
+  if (r.ok) {
+    if (label) label.textContent = L('saved');
+    const dotMap = { led: 'led-unsaved', sound: 'sound-unsaved', permission: 'perm-unsaved', display: 'disp-unsaved', network: 'net-unsaved' };
+    const dot = document.getElementById(dotMap[section]);
+    if (dot) dot.classList.remove('visible');
+    showMessage(L('save_ok'), 'success');
+    setTimeout(() => {
+      if (label) label.textContent = L('save');
+      if (btn) { btn.disabled = false; btn.classList.remove('saving'); }
+    }, 2000);
+  } else {
+    showMessage(L('save_fail'), 'error');
+    if (label) label.textContent = L('save');
+    if (btn) { btn.disabled = false; btn.classList.remove('saving'); }
+  }
+}
+
+// --- Factory Reset ---
+function openResetModal() {
+  document.getElementById('reset-modal').classList.remove('hidden');
+}
+
+function closeResetModal() {
+  document.getElementById('reset-modal').classList.add('hidden');
+}
+
+async function doFactoryReset() {
+  closeResetModal();
+  setText('lbl-reset-btn', L('reset_ok'));
+
+  const r = await postJSON('/api/config/reset', {});
+
+  if (r.ok) {
+    showMessage('Factory reset complete. Restarting...', 'info', 5000);
+    // Device will restart — redirect to AP address after delay
+    setTimeout(() => {
+      window.location.href = 'http://192.168.4.1/';
+    }, 3000);
+  } else {
+    showMessage('Reset failed', 'error');
+    setText('lbl-reset-btn', L('reset_btn'));
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('reset-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeResetModal();
+});
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', function() {
+  applyLabels();
+  loadConfig();
+});
+
+document.addEventListener('langchange', function() {
+  applyLabels();
+});
+</script>
+</body>
+</html>

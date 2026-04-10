@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>InksPet — WiFi Setup</title>
+<link rel="stylesheet" href="style.css">
+<style>
+/* WiFi page specific styles */
+
+.scan-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.network-list {
+  min-height: 60px;
+  margin-bottom: 16px;
+}
+
+/* Password field with show/hide toggle */
+.input-group {
+  position: relative;
+}
+
+.input-group .form-input {
+  padding-right: 44px;
+}
+
+.input-toggle-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-sec);
+  font-size: 14px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  transition: color var(--transition);
+}
+.input-toggle-btn:hover { color: var(--text); }
+
+/* Signal strength label in network row */
+.rssi-label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+/* Success screen */
+.success-screen {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.success-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.success-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--success);
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+
+.success-msg {
+  font-size: 13px;
+  color: var(--text-sec);
+  line-height: 1.6;
+  margin-bottom: 24px;
+  font-family: var(--font-mono);
+}
+
+/* Countdown pill */
+.countdown-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-glow);
+  border: 1px solid rgba(118,185,0,0.3);
+  border-radius: 99px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+/* AP mode notice */
+.ap-notice {
+  background: rgba(88,166,255,0.08);
+  border: 1px solid rgba(88,166,255,0.25);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--info);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+/* Connecting overlay */
+.connecting-overlay {
+  text-align: center;
+  padding: 32px 16px;
+}
+
+.connecting-text {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-sec);
+  margin-top: 12px;
+}
+
+/* Security badge */
+.security-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  border: 1px solid var(--border);
+  color: var(--text-sec);
+}
+.security-badge.open {
+  border-color: rgba(88,166,255,0.3);
+  color: var(--info);
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <a href="index.html" class="back-link">&#8592; <span id="lbl-back">Back</span></a>
+        <div style="width:1px;height:20px;background:var(--border)"></div>
+        <div class="logo">
+          <div class="logo-icon">🐾</div>
+          <div class="logo-text">
+            <span class="logo-name">InksPet</span>
+            <span class="logo-tagline" id="lbl-page-title">WiFi Setup</span>
+          </div>
+        </div>
+      </div>
+      <div class="lang-toggle">
+        <button class="lang-btn active" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="zh">中</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main content (hidden when showing success/connecting) -->
+  <div id="main-content">
+
+    <!-- AP mode notice (shown if IP is 192.168.4.1) -->
+    <div class="ap-notice" id="ap-notice" style="display:none">
+      <strong>AP Mode</strong> — InksPet is broadcasting its own WiFi. Connect to your home network below to enable full functionality.
+    </div>
+
+    <!-- Scan section -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">
+          <span class="dot" style="background:var(--info)"></span>
+          <span id="lbl-networks">Nearby Networks</span>
+        </span>
+        <div class="scan-btn-row" style="margin-bottom:0">
+          <button class="btn btn-secondary btn-sm" id="scan-btn" onclick="startScan()">
+            <span id="scan-btn-icon">&#8635;</span>
+            <span id="scan-btn-label">Scan</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Network list -->
+      <div class="network-list" id="network-list">
+        <div class="empty-state">
+          <div class="empty-icon">📶</div>
+          <div id="lbl-scan-hint">Press Scan to find networks</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Credentials section -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">
+          <span class="dot"></span>
+          <span id="lbl-credentials">Credentials</span>
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="input-ssid" id="lbl-ssid-field">Network Name (SSID)</label>
+        <input type="text"
+               id="input-ssid"
+               class="form-input"
+               placeholder="MyNetwork"
+               autocomplete="off"
+               autocorrect="off"
+               autocapitalize="none"
+               spellcheck="false">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="input-password" id="lbl-pass-field">Password</label>
+        <div class="input-group">
+          <input type="password"
+                 id="input-password"
+                 class="form-input"
+                 placeholder="••••••••"
+                 autocomplete="current-password">
+          <button class="input-toggle-btn" onclick="togglePasswordVis()" id="pass-toggle" title="Show/hide password">
+            👁
+          </button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="connect-btn" onclick="doConnect()">
+        <span id="connect-btn-label">Connect</span>
+      </button>
+    </div>
+
+  </div><!-- /main-content -->
+
+  <!-- Connecting state -->
+  <div id="connecting-screen" class="hidden">
+    <div class="card">
+      <div class="connecting-overlay">
+        <div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto"></div>
+        <div class="connecting-text" id="connecting-text">Saving credentials and restarting...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success screen -->
+  <div id="success-screen" class="hidden">
+    <div class="card">
+      <div class="success-screen">
+        <span class="success-icon">✅</span>
+        <div class="success-title" id="lbl-success">Connected!</div>
+        <div class="success-msg" id="lbl-success-msg">
+          Credentials saved. InksPet is restarting and will connect to your network.
+        </div>
+        <div class="countdown-pill">
+          <span>&#8635;</span>
+          <span id="countdown-text">Reconnect in <strong id="countdown-num">10</strong>s</span>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:8px">
+      <a href="index.html" class="back-link">&#8592; <span>Return to Dashboard</span></a>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script src="script.js"></script>
+<script>
+/* =====================================================
+   WiFi Config page logic
+   ===================================================== */
+
+const PAGE_LABELS = {
+  en: {
+    back: 'Back',
+    page_title: 'WiFi Setup',
+    networks: 'Nearby Networks',
+    scan: 'Scan',
+    scanning: 'Scanning...',
+    scan_hint: 'Press Scan to find networks',
+    no_networks: 'No networks found',
+    credentials: 'Credentials',
+    ssid_field: 'Network Name (SSID)',
+    pass_field: 'Password',
+    connect: 'Connect',
+    connecting: 'Saving credentials and restarting...',
+    success: 'Credentials Saved!',
+    success_msg: 'InksPet is restarting and will connect to your WiFi network. This page will reload automatically.',
+    countdown: 'Reconnect in',
+    seconds: 's',
+    secure: 'WPA',
+    open: 'Open',
+    ap_notice: 'AP Mode — InksPet is broadcasting its own WiFi. Connect to your home network below to enable full functionality.',
+  },
+  zh: {
+    back: '返回',
+    page_title: 'WiFi 配置',
+    networks: '附近网络',
+    scan: '扫描',
+    scanning: '扫描中...',
+    scan_hint: '点击扫描以查找网络',
+    no_networks: '未找到网络',
+    credentials: '凭据',
+    ssid_field: '网络名称 (SSID)',
+    pass_field: '密码',
+    connect: '连接',
+    connecting: '保存凭据并重启中...',
+    success: '凭据已保存！',
+    success_msg: 'InksPet 正在重启并将连接到您的 WiFi 网络，页面将自动重新加载。',
+    countdown: '重新连接倒计时',
+    seconds: '秒',
+    secure: 'WPA',
+    open: '开放',
+    ap_notice: 'AP 模式 — InksPet 正在广播自己的 WiFi。请连接到您的家庭网络以启用全部功能。',
+  }
+};
+
+function L(key) {
+  const map = PAGE_LABELS[currentLang] || PAGE_LABELS.en;
+  return map[key] || PAGE_LABELS.en[key] || key;
+}
+
+function applyLabels() {
+  setText('lbl-back', L('back'));
+  setText('lbl-page-title', L('page_title'));
+  setText('lbl-networks', L('networks'));
+  setText('scan-btn-label', L('scan'));
+  setText('lbl-credentials', L('credentials'));
+  setText('lbl-ssid-field', L('ssid_field'));
+  setText('lbl-pass-field', L('pass_field'));
+  setText('connect-btn-label', L('connect'));
+  setText('lbl-success', L('success'));
+  setText('lbl-success-msg', L('success_msg'));
+  setText('connecting-text', L('connecting'));
+  const hint = document.getElementById('lbl-scan-hint');
+  if (hint) hint.textContent = L('scan_hint');
+  document.getElementById('ap-notice').textContent = L('ap_notice');
+}
+
+function setText(id, txt) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = txt;
+}
+
+// --- Network list state ---
+let scannedNetworks = [];
+let selectedSSID = '';
+let scanPollTimer = null;
+
+function startScan() {
+  const btn = document.getElementById('scan-btn');
+  const list = document.getElementById('network-list');
+
+  btn.disabled = true;
+  setText('scan-btn-label', L('scanning'));
+  document.getElementById('scan-btn-icon').textContent = '';
+  // Add spinner in button
+  const spinner = document.createElement('span');
+  spinner.className = 'spinner';
+  spinner.style.cssText = 'width:12px;height:12px;border-width:2px;';
+  spinner.id = 'scan-spinner';
+  btn.insertBefore(spinner, btn.firstChild);
+
+  list.innerHTML = `<div class="empty-state"><div class="spinner" style="width:20px;height:20px;border-width:2px;margin:0 auto 8px"></div><div>${L('scanning')}</div></div>`;
+
+  // POST to start scan
+  fetch('/api/wifi/scan', { method: 'POST' }).then(() => {
+    // Poll for results
+    let attempts = 0;
+    scanPollTimer = setInterval(async () => {
+      attempts++;
+      const r = await fetchJSON('/api/wifi/scan');
+      if (r.ok && r.data) {
+        if (!r.data.scanning) {
+          clearInterval(scanPollTimer);
+          scanPollTimer = null;
+          scannedNetworks = (r.data.networks || []).sort((a, b) => b.rssi - a.rssi);
+          renderNetworkList();
+          // Reset button
+          btn.disabled = false;
+          setText('scan-btn-label', L('scan'));
+          document.getElementById('scan-btn-icon').textContent = '⟳';
+          const sp = document.getElementById('scan-spinner');
+          if (sp) sp.remove();
+        }
+      }
+      // Give up after 15s
+      if (attempts > 15) {
+        clearInterval(scanPollTimer);
+        scanPollTimer = null;
+        btn.disabled = false;
+        setText('scan-btn-label', L('scan'));
+        const sp = document.getElementById('scan-spinner');
+        if (sp) sp.remove();
+      }
+    }, 1000);
+  }).catch(() => {
+    btn.disabled = false;
+    setText('scan-btn-label', L('scan'));
+    const sp = document.getElementById('scan-spinner');
+    if (sp) sp.remove();
+    showMessage('Scan request failed', 'error');
+  });
+}
+
+function renderNetworkList() {
+  const list = document.getElementById('network-list');
+
+  if (!scannedNetworks.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔇</div><div>${L('no_networks')}</div></div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  scannedNetworks.forEach(net => {
+    const item = document.createElement('div');
+    item.className = 'network-item' + (net.ssid === selectedSSID ? ' selected' : '');
+    item.onclick = () => selectNetwork(net.ssid);
+
+    const secLabel = net.secure ? L('secure') : L('open');
+    const secClass = net.secure ? '' : 'open';
+
+    item.innerHTML = `
+      <span class="network-ssid">${escapeHtml(net.ssid)}</span>
+      <span class="network-meta">
+        <span class="rssi-label">${net.rssi} dBm</span>
+        ${signalBarsHTML(net.rssi)}
+        <span class="security-badge ${secClass}">${secLabel}</span>
+      </span>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function selectNetwork(ssid) {
+  selectedSSID = ssid;
+  document.getElementById('input-ssid').value = ssid;
+  document.getElementById('input-password').focus();
+  renderNetworkList();
+}
+
+function togglePasswordVis() {
+  const input = document.getElementById('input-password');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function doConnect() {
+  const ssid = document.getElementById('input-ssid').value.trim();
+  const pass = document.getElementById('input-password').value;
+
+  if (!ssid) {
+    showMessage('Please enter an SSID', 'warn');
+    document.getElementById('input-ssid').focus();
+    return;
+  }
+
+  // Show connecting state
+  document.getElementById('main-content').classList.add('hidden');
+  document.getElementById('connecting-screen').classList.remove('hidden');
+  setText('connecting-text', L('connecting'));
+
+  const r = await postJSON('/api/wifi/connect', { ssid, password: pass });
+
+  // Show success regardless (device will restart)
+  document.getElementById('connecting-screen').classList.add('hidden');
+  document.getElementById('success-screen').classList.remove('hidden');
+
+  // Countdown to auto-reload
+  let countdown = 12;
+  document.getElementById('countdown-num').textContent = countdown;
+  const timer = setInterval(() => {
+    countdown--;
+    document.getElementById('countdown-num').textContent = countdown;
+    if (countdown <= 0) {
+      clearInterval(timer);
+      window.location.href = 'http://inkspet.local/';
+    }
+  }, 1000);
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// --- Init ---
+document.addEventListener('DOMContentLoaded', function() {
+  applyLabels();
+
+  // Show AP mode notice if on 192.168.4.x
+  if (location.hostname.startsWith('192.168.4.')) {
+    document.getElementById('ap-notice').style.display = 'block';
+  }
+
+  // Auto-scan on load
+  startScan();
+});
+
+document.addEventListener('langchange', applyLabels);
+</script>
+</body>
+</html>
