@@ -264,11 +264,11 @@
           <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5" id="claude-desc">
             Copy this prompt and paste it into Claude Code (or any AI coding assistant). It will configure the hooks automatically.
           </p>
-          <div style="position:relative">
-            <pre id="claude-prompt" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:320px;overflow-y:auto;margin:0"></pre>
-            <button onclick="copyBlock('claude-prompt')" style="position:absolute;top:8px;right:8px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">
-              <span id="copy-btn-claude">COPY</span>
-            </button>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <div style="display:flex;justify-content:flex-end;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--bg-card)">
+              <button onclick="copyBlock('claude-prompt')" style="background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+            </div>
+            <pre id="claude-prompt" style="padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:320px;overflow-y:auto;margin:0"></pre>
           </div>
         </div>
       </div>
@@ -279,9 +279,11 @@
           <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5">
             This universal prompt works with any AI coding assistant (Copilot, Cursor, Codex, etc). Paste it and the AI will figure out how to set up hooks for its own tool.
           </p>
-          <div style="position:relative">
-            <pre id="universal-prompt" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:320px;overflow-y:auto;margin:0"></pre>
-            <button onclick="copyBlock('universal-prompt')" style="position:absolute;top:8px;right:8px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <div style="display:flex;justify-content:flex-end;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--bg-card)">
+              <button onclick="copyBlock('universal-prompt')" style="background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+            </div>
+            <pre id="universal-prompt" style="padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:320px;overflow-y:auto;margin:0"></pre>
           </div>
         </div>
       </div>
@@ -292,9 +294,11 @@
           <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5">
             Add this JSON to your Claude Code <code style="background:var(--bg);padding:2px 6px;border-radius:3px;font-size:12px">~/.claude/settings.json</code> hooks section:
           </p>
-          <div style="position:relative">
-            <pre id="manual-json" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:11px;font-family:var(--font-mono);color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;max-height:400px;overflow-y:auto;margin:0"></pre>
-            <button onclick="copyBlock('manual-json')" style="position:absolute;top:8px;right:8px;background:var(--accent);color:#000;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <div style="display:flex;justify-content:flex-end;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--bg-card)">
+              <button onclick="copyBlock('manual-json')" style="background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+            </div>
+            <pre id="manual-json" style="padding:14px;font-size:11px;font-family:var(--font-mono);color:var(--text);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;max-height:400px;overflow-y:auto;margin:0"></pre>
           </div>
         </div>
       </div>
@@ -949,24 +953,42 @@ function showHookTab(tab) {
 
 function copyBlock(id) {
   const text = document.getElementById(id).textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.querySelector('#' + id + ' ~ button, [onclick*="' + id + '"]');
+  const btn = document.querySelector('[onclick*="' + id + '"]');
+
+  function setCopied() {
     if (btn) {
       const orig = btn.textContent;
       btn.textContent = 'COPIED!';
       btn.style.background = '#27c93f';
-      setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 2000);
+      setTimeout(() => { btn.textContent = orig; btn.style.background = 'var(--accent)'; }, 2000);
     }
     showMessage('Copied to clipboard!', 'success');
-  }).catch(() => {
-    // Fallback: select text
+  }
+
+  function fallbackCopy() {
     const range = document.createRange();
     range.selectNodeContents(document.getElementById(id));
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
-    showMessage('Text selected. Press Ctrl+C to copy.', 'info');
-  });
+    try {
+      if (document.execCommand('copy')) {
+        setCopied();
+      } else {
+        showMessage('Text selected. Press Ctrl+C to copy.', 'info');
+      }
+    } catch(err) {
+      showMessage('Text selected. Press Ctrl+C to copy.', 'info');
+    }
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(setCopied)
+      .catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
 }
 
 // Close modal on backdrop click
