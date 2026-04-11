@@ -255,12 +255,25 @@ python3 build.py
 pio run                  # Build firmware
 pio run -t buildfs       # Build LittleFS filesystem
 
-# Flash to device
-./flash_all.sh /dev/cu.usbserial-XXXXX      # Full flash
-./flash_all.sh /dev/cu.usbserial-XXXXX -f   # Firmware only
-./flash_all.sh /dev/cu.usbserial-XXXXX -e   # Erase + full flash
-./flash_all.sh /dev/cu.usbserial-XXXXX -m   # Serial monitor
+# 烧录到设备 (交互式菜单: 刷机 / 仅记录日志 / 备份 / 监控)
+./flash_all.sh /dev/cu.usbserial-XXXXX
+
+# 直接进入长时间监控仪表板
+./flash_all.sh /dev/cu.usbserial-XXXXX -m
+
+# 使用 .flash_config 保存的配置
+./flash_all.sh /dev/cu.usbserial-XXXXX -c
+
+# 查看帮助
+./flash_all.sh -h
 ```
+
+`flash_all.sh` 通过交互式菜单提供四种操作模式:
+
+1. **刷写固件 / 文件系统** -- 完整刷新或仅固件, 可选是否擦除闪存
+2. **记录设备日志** -- 串口输出保存到 `logs/serial_*.log`
+3. **备份固件** -- 将完整 4MB 闪存导出到 `backups/` 目录
+4. **长时间监控模式** -- 实时仪表板追踪重启、崩溃、内存错误、看门狗超时、WiFi 断开、Agent 事件、权限请求、墨水屏刷新、API 成功率和设备稳定性 (MTBF)。退出时自动生成 JSON 统计数据和摘要报告。
 
 ### 构建产物
 

@@ -255,12 +255,25 @@ python3 build.py
 pio run                  # Build firmware
 pio run -t buildfs       # Build LittleFS filesystem
 
-# Flash to device
-./flash_all.sh /dev/cu.usbserial-XXXXX      # Full flash
-./flash_all.sh /dev/cu.usbserial-XXXXX -f   # Firmware only
-./flash_all.sh /dev/cu.usbserial-XXXXX -e   # Erase + full flash
-./flash_all.sh /dev/cu.usbserial-XXXXX -m   # Serial monitor
+# デバイスにフラッシュ (対話式メニュー: 書き込み / ログ記録 / バックアップ / モニター)
+./flash_all.sh /dev/cu.usbserial-XXXXX
+
+# 長時間モニターダッシュボードに直接入る
+./flash_all.sh /dev/cu.usbserial-XXXXX -m
+
+# .flash_config に保存された設定を使用
+./flash_all.sh /dev/cu.usbserial-XXXXX -c
+
+# ヘルプを表示
+./flash_all.sh -h
 ```
+
+`flash_all.sh` は対話式メニューから 4 つの操作モードを提供します:
+
+1. **ファームウェア / ファイルシステムの書き込み** -- 完全書き込みまたはファームウェアのみ、フラッシュ消去オプション付き
+2. **デバイスログ記録** -- シリアル出力を `logs/serial_*.log` に保存
+3. **ファームウェアのバックアップ** -- 4MB フラッシュ全体を `backups/` にダンプ
+4. **長時間モニターモード** -- リアルタイムダッシュボードで再起動、クラッシュ、メモリエラー、ウォッチドッグタイムアウト、WiFi 切断、エージェントイベント、権限要求、電子ペーパーリフレッシュ、API 成功率、デバイス安定性 (MTBF) を追跡。終了時に JSON 統計とサマリーレポートを自動生成。
 
 ### ビルド成果物
 

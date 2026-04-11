@@ -255,12 +255,25 @@ python3 build.py
 pio run                  # Build firmware
 pio run -t buildfs       # Build LittleFS filesystem
 
-# Flash to device
-./flash_all.sh /dev/cu.usbserial-XXXXX      # Full flash
-./flash_all.sh /dev/cu.usbserial-XXXXX -f   # Firmware only
-./flash_all.sh /dev/cu.usbserial-XXXXX -e   # Erase + full flash
-./flash_all.sh /dev/cu.usbserial-XXXXX -m   # Serial monitor
+# Flash to device (interactive menu: flash / log-only / backup / monitor)
+./flash_all.sh /dev/cu.usbserial-XXXXX
+
+# Jump straight into long-term monitor dashboard
+./flash_all.sh /dev/cu.usbserial-XXXXX -m
+
+# Use saved config from .flash_config
+./flash_all.sh /dev/cu.usbserial-XXXXX -c
+
+# Show help
+./flash_all.sh -h
 ```
+
+`flash_all.sh` provides four operation modes via interactive menu:
+
+1. **Flash firmware / filesystem** — full flash or firmware-only, with optional erase
+2. **Log device output** — serial capture to `logs/serial_*.log`
+3. **Backup firmware** — dumps full 4MB flash to `backups/`
+4. **Long-term monitor** — real-time dashboard tracking reboots, crashes, memory, watchdog, WiFi drops, agent events, permission requests, display refreshes, API success rate, and device stability (MTBF). Generates JSON stats and summary report on exit.
 
 ### Build Output
 
