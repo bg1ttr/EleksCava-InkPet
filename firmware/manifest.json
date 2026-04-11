@@ -10,22 +10,22 @@
       "improv": false,
       "parts": [
         {
-          "path": "bootloader-v1.0.1-2604111305.bin",
+          "path": "bootloader-v1.0.1-2604111320.bin",
           "offset": "0x1000",
           "size": 17536
         },
         {
-          "path": "partitions-v1.0.1-2604111305.bin",
+          "path": "partitions-v1.0.1-2604111320.bin",
           "offset": "0x8000",
           "size": 3072
         },
         {
-          "path": "firmware-v1.0.1-2604111305.bin",
+          "path": "firmware-v1.0.1-2604111320.bin",
           "offset": "0x10000",
           "size": 1027952
         },
         {
-          "path": "spiffs-v1.0.1-2604111305.bin",
+          "path": "spiffs-v1.0.1-2604111320.bin",
           "offset": "0x310000",
           "size": 917504
         }
