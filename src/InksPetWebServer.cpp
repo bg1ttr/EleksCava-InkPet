@@ -270,7 +270,10 @@ void InksPetWebServer::setupConfigApiRoutes() {
     // POST /api/config/reset - Factory reset
     _server->on("/api/config/reset", HTTP_POST, [](AsyncWebServerRequest* request) {
         ConfigManager::getInstance()->resetToDefaults();
+        WiFiManager::getInstance()->clearCredentials();  // Clear WiFi credentials so device boots into AP mode
         request->send(200, "application/json", "{\"success\":true,\"message\":\"Config reset to defaults\"}");
+        delay(1000);
+        ESP.restart();
     });
 }
 
