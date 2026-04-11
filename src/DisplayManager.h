@@ -45,6 +45,14 @@ public:
                         size_t freeHeap);
     void showTimeMode(const String& time, const String& date);
 
+    // Power management
+    void hibernate();  // Power off e-paper panel (for idle state)
+    void wake();       // Reinitialize panel after hibernate
+    bool isHibernated() const { return _hibernated; }
+
+    // Force next render to be a full refresh (for periodic ghosting prevention)
+    void requestFullRefresh() { _forceFullRefresh = true; }
+
     // Utilities
     GxEPD2_BW<GxEPD2_290_T94, DISP_HEIGHT>* getDisplay() { return _display; }
     U8G2_FOR_ADAFRUIT_GFX* getFonts() { return &_u8g2; }
@@ -61,6 +69,8 @@ private:
     SemaphoreHandle_t _mutex;
     int _partialCount;
     bool _initialized;
+    bool _hibernated;         // Panel powered off
+    bool _forceFullRefresh;   // Force next draw to full refresh
     uint8_t _lastScreenType;  // Track screen type for ghosting prevention
 
     void drawCenteredText(const char* text, int y, const uint8_t* font);

@@ -46,6 +46,13 @@ static const unsigned long TIME_DISPLAY_INTERVAL_MS = 60000;  // 1 minute
 static unsigned long lastAgentDisplayRefresh = 0;
 static const unsigned long AGENT_DISPLAY_REFRESH_MS = 10000;  // 10 seconds
 
+// Periodic full refresh to prevent e-paper ghosting + hibernate for idle
+static unsigned long lastFullRefreshMs = 0;
+static const unsigned long FULL_REFRESH_INTERVAL_MS = 10UL * 60UL * 1000UL;  // 10 minutes
+static unsigned long idleEnteredMs = 0;
+static const unsigned long HIBERNATE_AFTER_IDLE_MS = 30UL * 1000UL;  // hibernate 30s after entering idle
+static bool displayHibernatedForIdle = false;
+
 // =============================================================================
 // GxEPD2 display object (allocated in setup to avoid global constructor crash)
 // =============================================================================
@@ -191,6 +198,9 @@ void setup() {
     // ---- 14-20. Post-WiFi initialization ----
     initPostWiFi();
 
+    // Initialize anti-ghosting timer baseline
+    lastFullRefreshMs = millis();
+
     LOG_INFO(TAG, "=== %s ready! ===", FIRMWARE_NAME);
     LOG_INFO(TAG, "Free heap: %u bytes", ESP.getFreeHeap());
 }
@@ -244,9 +254,40 @@ void loop() {
     // ---- 10. Time manager update (hourly NTP re-sync) ----
     timeMgr->update();
 
-    // ---- 11a. Agent display: no periodic refresh (causes e-paper ghosting) ----
-    // Elapsed timer updates only when new webhook events arrive.
-    // E-paper partial refresh accumulates residue — frequent redraws degrade quality.
+    // ---- 11a. Idle hibernate + periodic full refresh (e-paper lifespan) ----
+    {
+        AgentState curState = agentMgr->getCurrentState();
+        bool isIdle = (curState == AgentState::SLEEPING || curState == AgentState::IDLE);
+        unsigned long now = millis();
+
+        if (isIdle) {
+            // Track when we entered idle
+            if (idleEnteredMs == 0) idleEnteredMs = now;
+
+            // After HIBERNATE_AFTER_IDLE_MS of idle, power off the panel
+            if (!displayHibernatedForIdle &&
+                (now - idleEnteredMs >= HIBERNATE_AFTER_IDLE_MS)) {
+                LOG_INFO(TAG, "Idle for %lus, hibernating display",
+                         (now - idleEnteredMs) / 1000);
+                display->hibernate();
+                displayHibernatedForIdle = true;
+            }
+        } else {
+            // Not idle — reset idle timer
+            idleEnteredMs = 0;
+            displayHibernatedForIdle = false;
+
+            // Periodic full refresh every 10min to prevent ghosting
+            // Only when active and not hibernated
+            if (!display->isHibernated() &&
+                (now - lastFullRefreshMs >= FULL_REFRESH_INTERVAL_MS)) {
+                LOG_INFO(TAG, "10-minute full refresh (anti-ghosting)");
+                lastFullRefreshMs = now;
+                display->requestFullRefresh();
+                updateDisplayForCurrentMode();
+            }
+        }
+    }
 
     // ---- 11b. Update time display if in time mode (every minute) ----
     if (currentDisplayMode == DisplayMode::TIME_MODE) {

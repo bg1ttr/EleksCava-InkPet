@@ -8,8 +8,33 @@ static const char* TAG = "Display";
 DisplayManager* DisplayManager::_instance = nullptr;
 
 DisplayManager::DisplayManager()
-    : _display(nullptr), _mutex(nullptr), _partialCount(0), _initialized(false), _lastScreenType(0) {
+    : _display(nullptr), _mutex(nullptr), _partialCount(0), _initialized(false),
+      _hibernated(false), _forceFullRefresh(false), _lastScreenType(0) {
     _mutex = xSemaphoreCreateMutex();
+}
+
+// Power down e-paper panel (idle state — extends panel lifespan)
+void DisplayManager::hibernate() {
+    if (!_display || _hibernated) return;
+    if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
+        _display->hibernate();
+        _hibernated = true;
+        LOG_INFO("Display", "Panel hibernated (powered off)");
+        xSemaphoreGive(_mutex);
+    }
+}
+
+// Wake e-paper panel after hibernate — caller should follow with a draw
+void DisplayManager::wake() {
+    if (!_display || !_hibernated) return;
+    if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
+        _display->init(0, false);  // false = no reset, just wake
+        _display->setRotation(1);
+        _hibernated = false;
+        _forceFullRefresh = true;  // First draw after wake should be full refresh
+        LOG_INFO("Display", "Panel woken up");
+        xSemaphoreGive(_mutex);
+    }
 }
 
 // Anti-ghosting: quick white clear (fast) or full black->white cycle (thorough)
@@ -238,6 +263,11 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
     if (!_initialized) return;
     esp_task_wdt_reset();
 
+    // Auto-wake from hibernate if needed
+    if (_hibernated) {
+        wake();
+    }
+
     if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
         // Anti-ghosting: deep clean when switching from a different screen type
         if (_lastScreenType != 1) {
@@ -245,7 +275,9 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
             _lastScreenType = 1;
         }
 
-        bool doFull = needsFullRefresh();
+        // Force full refresh if requested (periodic anti-ghosting or after wake)
+        bool doFull = needsFullRefresh() || _forceFullRefresh;
+        _forceFullRefresh = false;
 
         if (doFull) {
             _display->setFullWindow();
