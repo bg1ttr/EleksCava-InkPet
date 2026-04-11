@@ -367,6 +367,10 @@ static void onAgentStateChange(AgentState state, const AgentSession* session) {
         info.edits = session->edits;
         info.bashes = session->bashes;
         info.activeSessions = agentMgr->getActiveSessionCount();
+        info.hasTasks = session->hasTasks;
+        info.tasksDone = session->tasksDone;
+        info.tasksRunning = session->tasksRunning;
+        info.tasksPending = session->tasksPending;
         display->showAgentState(info);
     } else {
         DisplayManager::AgentDisplayInfo info = {};
@@ -558,6 +562,10 @@ static void refreshAgentStateDisplay() {
         info.edits = session->edits;
         info.bashes = session->bashes;
         info.activeSessions = agentMgr->getActiveSessionCount();
+        info.hasTasks = session->hasTasks;
+        info.tasksDone = session->tasksDone;
+        info.tasksRunning = session->tasksRunning;
+        info.tasksPending = session->tasksPending;
         display->showAgentState(info);
     } else {
         DisplayManager::AgentDisplayInfo info = {};

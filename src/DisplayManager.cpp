@@ -373,7 +373,35 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
                 char stats[48];
                 snprintf(stats, sizeof(stats), "R:%u W:%u E:%u B:%u  [%u calls]",
                          info.reads, info.writes, info.edits, info.bashes, info.toolCalls);
+                // Truncate if too wide for content area (max ~220px @ helvR08)
+                _u8g2.setFont(u8g2_font_helvR08_tr);
+                const int16_t MAX_W = DISP_WIDTH - RX - 4;
+                while (strlen(stats) > 8 && _u8g2.getUTF8Width(stats) > MAX_W) {
+                    stats[strlen(stats) - 1] = '\0';  // trim last char
+                }
                 drawTextAt(stats, RX, 66, u8g2_font_helvR08_tr);
+            }
+
+            // Row 5: Task progress (from TodoWrite hook)
+            if (info.hasTasks) {
+                char tasks[48];
+                int total = info.tasksDone + info.tasksRunning + info.tasksPending;
+                if (info.tasksRunning > 0) {
+                    snprintf(tasks, sizeof(tasks), "Tasks: %u/%u done  %u active",
+                             info.tasksDone, total, info.tasksRunning);
+                } else if (info.tasksPending > 0) {
+                    snprintf(tasks, sizeof(tasks), "Tasks: %u/%u done  %u pending",
+                             info.tasksDone, total, info.tasksPending);
+                } else {
+                    snprintf(tasks, sizeof(tasks), "Tasks: %u/%u done", info.tasksDone, total);
+                }
+                // Truncate to fit
+                _u8g2.setFont(u8g2_font_helvR08_tr);
+                const int16_t MAX_W2 = DISP_WIDTH - RX - 4;
+                while (strlen(tasks) > 8 && _u8g2.getUTF8Width(tasks) > MAX_W2) {
+                    tasks[strlen(tasks) - 1] = '\0';
+                }
+                drawTextAt(tasks, RX, 82, u8g2_font_helvR08_tr);
             }
 
             // === Bottom black info bar (static: IP + hostname) ===

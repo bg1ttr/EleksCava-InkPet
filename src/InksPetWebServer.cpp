@@ -158,12 +158,38 @@ void InksPetWebServer::setupAgentApiRoutes() {
             doc["session"] = session->sessionId;
             doc["tool"] = session->tool;
             doc["file"] = session->file;
+            if (session->hasTasks) {
+                JsonObject tasks = doc.createNestedObject("tasks");
+                tasks["done"] = session->tasksDone;
+                tasks["running"] = session->tasksRunning;
+                tasks["pending"] = session->tasksPending;
+            }
         }
 
         String resp;
         serializeJson(doc, resp);
         request->send(200, "application/json", resp);
     });
+
+    // POST /api/agent/tasks - Update task progress from TodoWrite hook
+    _server->on("/api/agent/tasks", HTTP_POST,
+        [](AsyncWebServerRequest* request) { request->send(400); },
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            StaticJsonDocument<256> doc;
+            DeserializationError err = deserializeJson(doc, (const char*)data, len);
+            if (err) {
+                request->send(400, "application/json", "{\"error\":\"invalid json\"}");
+                return;
+            }
+            String session = doc["session"] | doc["agent"].as<String>();
+            uint16_t done = doc["done"] | 0;
+            uint16_t running = doc["running"] | 0;
+            uint16_t pending = doc["pending"] | 0;
+            AgentStateManager::getInstance()->updateTasks(session, done, running, pending);
+            request->send(200, "application/json", "{\"success\":true}");
+        }
+    );
 
     // GET /api/device/info - Device discovery
     _server->on("/api/device/info", HTTP_GET, [](AsyncWebServerRequest* request) {

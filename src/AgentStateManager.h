@@ -34,6 +34,11 @@ struct AgentSession {
     uint16_t writes;
     uint16_t edits;
     uint16_t bashes;
+    // Task progress (from TodoWrite tool)
+    uint16_t tasksDone;
+    uint16_t tasksRunning;
+    uint16_t tasksPending;
+    bool hasTasks;                // Whether any TodoWrite data has been received
 };
 
 class AgentStateManager {
@@ -42,6 +47,9 @@ public:
 
     // Process incoming webhook event
     void processEvent(const JsonObject& event);
+
+    // Update task progress from TodoWrite hook
+    void updateTasks(const String& sessionId, uint16_t done, uint16_t running, uint16_t pending);
 
     // Get current highest-priority state
     AgentState getCurrentState() const;

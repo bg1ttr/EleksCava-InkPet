@@ -36,6 +36,11 @@ public:
         uint16_t edits;
         uint16_t bashes;
         int activeSessions;
+        // Task progress (from TodoWrite tool)
+        bool hasTasks;
+        uint16_t tasksDone;
+        uint16_t tasksRunning;
+        uint16_t tasksPending;
     };
     void showAgentState(const AgentDisplayInfo& info);
     void showPermissionRequest(const char* agentName, const char* tool,

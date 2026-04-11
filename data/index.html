@@ -815,24 +815,34 @@ function getDeviceURL() {
 function openHookSetup() {
   const url = getDeviceURL();
   const ep = url + '/api/agent/state';
+  const tasksEp = url + '/api/agent/tasks';
 
   // Claude Code prompt (user pastes this into Claude Code CLI)
   document.getElementById('claude-prompt').textContent =
 `Please configure InksPet hooks in my ~/.claude/settings.json to send agent state events to my InksPet device.
 
-Device API endpoint: ${ep}
+Device endpoints:
+- State: ${ep}
+- Tasks: ${tasksEp}
 
 Add these hooks to the "hooks" section of ~/.claude/settings.json (merge with existing hooks, don't replace them):
 
-- UserPromptSubmit: POST to ${ep} with {"agent":"claude-code","event":"UserPromptSubmit"}
-- PreToolUse: POST to ${ep} with {"agent":"claude-code","event":"PreToolUse","tool":"<tool_name>"} — extract tool_name from stdin JSON .tool_name field
-- PostToolUse: POST to ${ep} with {"agent":"claude-code","event":"PostToolUse"}
-- Stop: POST to ${ep} with {"agent":"claude-code","event":"Stop"}
+1. UserPromptSubmit -> POST ${ep} with {"agent":"claude-code","event":"UserPromptSubmit"}
+
+2. PreToolUse (matcher: *) -> POST ${ep} with {"agent":"claude-code","event":"PreToolUse","tool":"<tool_name>"}
+   Extract tool_name from stdin JSON .tool_name field via jq.
+
+3. PreToolUse (matcher: TodoWrite) -> Also parse .tool_input.todos from stdin, count todos by status, and POST to ${tasksEp} with {"agent":"claude-code","done":N,"running":N,"pending":N}
+   Use jq to filter todos: completed count = [.tool_input.todos[] | select(.status=="completed")] | length
+   Same for in_progress (running) and pending.
+
+4. PostToolUse (matcher: *) -> POST ${ep} with {"agent":"claude-code","event":"PostToolUse"}
+
+5. Stop -> POST ${ep} with {"agent":"claude-code","event":"Stop"}
 
 Each hook should:
 - Use curl with -s flag and 3 second timeout
 - End with 2>/dev/null || true to avoid blocking if device is offline
-- PreToolUse hook should extract tool name from stdin via jq
 
 After configuring, verify the JSON is valid with jq.`;
 
@@ -840,21 +850,31 @@ After configuring, verify the JSON is valid with jq.`;
   document.getElementById('universal-prompt').textContent =
 `I have an InksPet device (AI agent monitor) on my local network. Please configure your hook/webhook system to send HTTP POST events to my device so it can display your working status in real-time.
 
-Device API endpoint: ${ep}
+Device endpoints:
+- State: ${ep}
+- Tasks: ${tasksEp}
 
-Send a POST request with Content-Type: application/json for each of these events:
+Send POST requests with Content-Type: application/json for each of these events:
 
 1. When I submit a prompt to you:
+   POST ${ep}
    {"agent":"<your_name>","event":"UserPromptSubmit"}
 
 2. Before you use any tool (read file, edit, run command, etc):
+   POST ${ep}
    {"agent":"<your_name>","event":"PreToolUse","tool":"<tool_name>"}
 
 3. After you finish using a tool:
+   POST ${ep}
    {"agent":"<your_name>","event":"PostToolUse"}
 
 4. When you finish responding:
+   POST ${ep}
    {"agent":"<your_name>","event":"Stop"}
+
+5. Whenever you update your task list (todos/TODOs/plan), report task counts:
+   POST ${tasksEp}
+   {"agent":"<your_name>","done":N,"running":N,"pending":N}
 
 Replace <your_name> with your tool's name (e.g. "copilot", "cursor", "codex").
 Replace <tool_name> with the actual tool being used.
@@ -873,14 +893,24 @@ Please configure this now using whatever hook/webhook mechanism your tool suppor
           "timeout": 3
         }]
       }],
-      "PreToolUse": [{
-        "matcher": "*",
-        "hooks": [{
-          "type": "command",
-          "command": "jq -r '.tool_name // empty' | { read -r t; curl -s -m 3 -X POST " + ep + " -H 'Content-Type: application/json' -d \"{\\\"agent\\\":\\\"claude-code\\\",\\\"event\\\":\\\"PreToolUse\\\",\\\"tool\\\":\\\"$t\\\"}\" 2>/dev/null || true; }",
-          "timeout": 3
-        }]
-      }],
+      "PreToolUse": [
+        {
+          "matcher": "*",
+          "hooks": [{
+            "type": "command",
+            "command": "jq -r '.tool_name // empty' | { read -r t; curl -s -m 3 -X POST " + ep + " -H 'Content-Type: application/json' -d \"{\\\"agent\\\":\\\"claude-code\\\",\\\"event\\\":\\\"PreToolUse\\\",\\\"tool\\\":\\\"$t\\\"}\" 2>/dev/null || true; }",
+            "timeout": 3
+          }]
+        },
+        {
+          "matcher": "TodoWrite",
+          "hooks": [{
+            "type": "command",
+            "command": "jq -c '{done: ([.tool_input.todos[]?|select(.status==\"completed\")]|length), running: ([.tool_input.todos[]?|select(.status==\"in_progress\")]|length), pending: ([.tool_input.todos[]?|select(.status==\"pending\")]|length), agent:\"claude-code\"}' | curl -s -m 3 -X POST " + tasksEp + " -H 'Content-Type: application/json' -d @- 2>/dev/null || true",
+            "timeout": 3
+          }]
+        }
+      ],
       "PostToolUse": [{
         "matcher": "*",
         "hooks": [{

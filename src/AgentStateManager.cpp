@@ -60,6 +60,39 @@ void AgentStateManager::processEvent(const JsonObject& event) {
     notifyStateChange();
 }
 
+void AgentStateManager::updateTasks(const String& sessionId, uint16_t done, uint16_t running, uint16_t pending) {
+    // Update matching session OR the highest-priority active one if sessionId not found
+    AgentSession* target = nullptr;
+    for (int i = 0; i < MAX_SESSIONS; i++) {
+        if (_sessions[i].active && _sessions[i].sessionId == sessionId) {
+            target = &_sessions[i];
+            break;
+        }
+    }
+
+    // Fallback: apply to any active session (agents may not always send consistent session IDs)
+    if (!target) {
+        for (int i = 0; i < MAX_SESSIONS; i++) {
+            if (_sessions[i].active) {
+                target = &_sessions[i];
+                break;
+            }
+        }
+    }
+
+    if (target) {
+        target->tasksDone = done;
+        target->tasksRunning = running;
+        target->tasksPending = pending;
+        target->hasTasks = true;
+        target->lastUpdate = millis();
+        LOG_INFO(TAG, "Tasks updated: %u done, %u running, %u pending", done, running, pending);
+        notifyStateChange();
+    } else {
+        LOG_WARNING(TAG, "updateTasks: no active session found for %s", sessionId.c_str());
+    }
+}
+
 AgentState AgentStateManager::mapEventToState(const String& event, int activeSessions) {
     if (event == "PermissionRequest") return AgentState::PERMISSION;
     if (event == "PostToolUseFailure") return AgentState::ERROR;
@@ -181,6 +214,10 @@ AgentSession* AgentStateManager::findOrCreateSession(const String& agent, const 
             _sessions[i].writes = 0;
             _sessions[i].edits = 0;
             _sessions[i].bashes = 0;
+            _sessions[i].tasksDone = 0;
+            _sessions[i].tasksRunning = 0;
+            _sessions[i].tasksPending = 0;
+            _sessions[i].hasTasks = false;
             LOG_INFO(TAG, "New session: %s (%s)", session.c_str(), agent.c_str());
             return &_sessions[i];
         }
