@@ -11,8 +11,6 @@ public:
 
     // Core display operations
     void clearScreen();
-    void fullRefresh();
-    void partialRefresh();
 
     // High-level display methods
     void showWelcome(const String& version, const String& mac);
@@ -62,9 +60,6 @@ public:
     GxEPD2_BW<GxEPD2_290_T94, DISP_HEIGHT>* getDisplay() { return _display; }
     U8G2_FOR_ADAFRUIT_GFX* getFonts() { return &_u8g2; }
     SemaphoreHandle_t getMutex() { return _mutex; }
-    void incrementPartialCount();
-    bool needsFullRefresh() const;
-
 private:
     DisplayManager();
     static DisplayManager* _instance;
@@ -72,11 +67,26 @@ private:
     GxEPD2_BW<GxEPD2_290_T94, DISP_HEIGHT>* _display;
     U8G2_FOR_ADAFRUIT_GFX _u8g2;
     SemaphoreHandle_t _mutex;
-    int _partialCount;
     bool _initialized;
     bool _hibernated;         // Panel powered off
-    bool _forceFullRefresh;   // Force next draw to full refresh
-    uint8_t _lastScreenType;  // Track screen type for ghosting prevention
+    bool _forceFullRefresh;   // Force next draw regardless of content cache
+    uint8_t _lastScreenType;  // Track screen type for anti-ghosting deepClean
+
+    // Content fingerprint — skip full refresh if nothing meaningful changed
+    struct ContentCache {
+        char stateName[16];
+        char agentName[32];
+        char tool[20];
+        char file[32];
+        int  activeSessions;
+        bool hasTasks;
+        uint16_t tasksDone, tasksRunning, tasksPending;
+    };
+    ContentCache _lastContent;
+    bool _contentCacheValid;
+
+    bool _hasContentChanged(const AgentDisplayInfo& info) const;
+    void _updateContentCache(const AgentDisplayInfo& info);
 
     void drawCenteredText(const char* text, int y, const uint8_t* font);
     void drawTextAt(const char* text, int x, int y, const uint8_t* font);

@@ -43,8 +43,6 @@ enum class DisplayMode : uint8_t {
 static DisplayMode currentDisplayMode = DisplayMode::AGENT_STATE;
 static unsigned long lastTimeDisplayUpdate = 0;
 static const unsigned long TIME_DISPLAY_INTERVAL_MS = 60000;  // 1 minute
-static unsigned long lastAgentDisplayRefresh = 0;
-static const unsigned long AGENT_DISPLAY_REFRESH_MS = 10000;  // 10 seconds
 
 // Periodic full refresh to prevent e-paper ghosting + hibernate for idle
 static unsigned long lastFullRefreshMs = 0;
@@ -274,6 +272,11 @@ void loop() {
             }
         } else {
             // Not idle — reset idle timer
+            if (idleEnteredMs != 0) {
+                // Just woke from idle: reset full-refresh timer to prevent
+                // an immediate double full-refresh right after wake
+                lastFullRefreshMs = now;
+            }
             idleEnteredMs = 0;
             displayHibernatedForIdle = false;
 
@@ -305,6 +308,34 @@ void loop() {
 
     // ---- 12. Yield to RTOS ----
     delay(10);
+}
+
+// =============================================================================
+// Build AgentDisplayInfo from current session (single source of truth)
+// =============================================================================
+static DisplayManager::AgentDisplayInfo buildAgentDisplayInfo(
+        AgentState state, const AgentSession* session) {
+    DisplayManager::AgentDisplayInfo info = {};
+    const char* sn = AgentStateManager::stateToString(state);
+    info.stateName  = AgentStateManager::stateToDisplayName(state);
+    info.pixelArt   = getPixelArtForState(sn);
+    info.activeSessions = agentMgr->getActiveSessionCount();
+    if (session) {
+        info.agentName    = session->agentName.c_str();
+        info.tool         = session->tool.c_str();
+        info.file         = session->file.c_str();
+        info.elapsedMs    = millis() - session->sessionStart;
+        info.toolCalls    = session->toolCalls;
+        info.reads        = session->reads;
+        info.writes       = session->writes;
+        info.edits        = session->edits;
+        info.bashes       = session->bashes;
+        info.hasTasks     = session->hasTasks;
+        info.tasksDone    = session->tasksDone;
+        info.tasksRunning = session->tasksRunning;
+        info.tasksPending = session->tasksPending;
+    }
+    return info;
 }
 
 // =============================================================================
@@ -352,36 +383,8 @@ static void onAgentStateChange(AgentState state, const AgentSession* session) {
             permMgr->getCurrentTool(),
             permMgr->getCurrentFile()
         );
-    } else if (session) {
-        const char* sn = AgentStateManager::stateToString(state);
-        DisplayManager::AgentDisplayInfo info = {};
-        info.stateName = AgentStateManager::stateToDisplayName(state);
-        info.agentName = session->agentName.c_str();
-        info.tool = session->tool.c_str();
-        info.file = session->file.c_str();
-        info.pixelArt = getPixelArtForState(sn);
-        info.elapsedMs = millis() - session->sessionStart;
-        info.toolCalls = session->toolCalls;
-        info.reads = session->reads;
-        info.writes = session->writes;
-        info.edits = session->edits;
-        info.bashes = session->bashes;
-        info.activeSessions = agentMgr->getActiveSessionCount();
-        info.hasTasks = session->hasTasks;
-        info.tasksDone = session->tasksDone;
-        info.tasksRunning = session->tasksRunning;
-        info.tasksPending = session->tasksPending;
-        display->showAgentState(info);
     } else {
-        DisplayManager::AgentDisplayInfo info = {};
-        info.stateName = "Idle";
-        info.agentName = "";
-        info.tool = "";
-        info.file = "";
-        info.pixelArt = getPixelArtForState("idle");
-        info.elapsedMs = 0;
-        info.activeSessions = 0;
-        display->showAgentState(info);
+        display->showAgentState(buildAgentDisplayInfo(state, session));
     }
 }
 
@@ -547,36 +550,8 @@ static void refreshAgentStateDisplay() {
             permMgr->getCurrentTool(),
             permMgr->getCurrentFile()
         );
-    } else if (session) {
-        const char* sn = AgentStateManager::stateToString(state);
-        DisplayManager::AgentDisplayInfo info = {};
-        info.stateName = AgentStateManager::stateToDisplayName(state);
-        info.agentName = session->agentName.c_str();
-        info.tool = session->tool.c_str();
-        info.file = session->file.c_str();
-        info.pixelArt = getPixelArtForState(sn);
-        info.elapsedMs = millis() - session->sessionStart;
-        info.toolCalls = session->toolCalls;
-        info.reads = session->reads;
-        info.writes = session->writes;
-        info.edits = session->edits;
-        info.bashes = session->bashes;
-        info.activeSessions = agentMgr->getActiveSessionCount();
-        info.hasTasks = session->hasTasks;
-        info.tasksDone = session->tasksDone;
-        info.tasksRunning = session->tasksRunning;
-        info.tasksPending = session->tasksPending;
-        display->showAgentState(info);
     } else {
-        DisplayManager::AgentDisplayInfo info = {};
-        info.stateName = "Idle";
-        info.agentName = "";
-        info.tool = "";
-        info.file = "";
-        info.pixelArt = getPixelArtForState("idle");
-        info.elapsedMs = 0;
-        info.activeSessions = 0;
-        display->showAgentState(info);
+        display->showAgentState(buildAgentDisplayInfo(state, session));
     }
 }
 

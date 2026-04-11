@@ -45,7 +45,7 @@
 
 #define PARTIAL_REFRESH_COOLDOWN_MS  800
 #define FULL_REFRESH_COOLDOWN_MS     3000
-#define FULL_REFRESH_INTERVAL        30    // Force full refresh every N partials
+#define FULL_REFRESH_INTERVAL        10    // Force full refresh every N partials
 
 #define SLEEP_TIMEOUT_MS        60000     // 60s idle -> sleeping state
 #define PERMISSION_TIMEOUT_MS   60000     // 60s auto-deny

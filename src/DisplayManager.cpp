@@ -8,9 +8,11 @@ static const char* TAG = "Display";
 DisplayManager* DisplayManager::_instance = nullptr;
 
 DisplayManager::DisplayManager()
-    : _display(nullptr), _mutex(nullptr), _partialCount(0), _initialized(false),
-      _hibernated(false), _forceFullRefresh(false), _lastScreenType(0) {
+    : _display(nullptr), _mutex(nullptr), _initialized(false),
+      _hibernated(false), _forceFullRefresh(false), _lastScreenType(0),
+      _contentCacheValid(false) {
     _mutex = xSemaphoreCreateMutex();
+    memset(&_lastContent, 0, sizeof(_lastContent));
 }
 
 // Power down e-paper panel (idle state — extends panel lifespan)
@@ -37,21 +39,17 @@ void DisplayManager::wake() {
     }
 }
 
-// Anti-ghosting: quick white clear (fast) or full black->white cycle (thorough)
+// Anti-ghosting: full black->white cycle to clear residual image
 void DisplayManager::deepClean() {
     if (!_display) return;
-    // Only do the slow black->white cycle after many partial refreshes
-    if (_partialCount > 15) {
-        _display->setFullWindow();
-        _display->firstPage();
-        do { _display->fillScreen(GxEPD_BLACK); } while (_display->nextPage());
-        delay(50);
-    }
-    // Always do a white clear
+    _display->setFullWindow();
+    _display->firstPage();
+    do { _display->fillScreen(GxEPD_BLACK); } while (_display->nextPage());
+    delay(50);
     _display->setFullWindow();
     _display->firstPage();
     do { _display->fillScreen(GxEPD_WHITE); } while (_display->nextPage());
-    _partialCount = 0;
+    _contentCacheValid = false;  // Force redraw after clean
 }
 
 DisplayManager* DisplayManager::getInstance() {
@@ -79,23 +77,34 @@ void DisplayManager::clearScreen() {
         do {
             _display->fillScreen(GxEPD_WHITE);
         } while (_display->nextPage());
-        _partialCount = 0;
+        _contentCacheValid = false;
         xSemaphoreGive(_mutex);
     }
 }
 
-void DisplayManager::fullRefresh() {
-    _partialCount = 0;
+bool DisplayManager::_hasContentChanged(const AgentDisplayInfo& info) const {
+    return strncmp(_lastContent.stateName,  info.stateName  ? info.stateName  : "", 15) != 0
+        || strncmp(_lastContent.agentName,  info.agentName  ? info.agentName  : "", 31) != 0
+        || strncmp(_lastContent.tool,       info.tool       ? info.tool       : "", 19) != 0
+        || strncmp(_lastContent.file,       info.file       ? info.file       : "", 31) != 0
+        || _lastContent.activeSessions != info.activeSessions
+        || _lastContent.hasTasks       != info.hasTasks
+        || _lastContent.tasksDone      != info.tasksDone
+        || _lastContent.tasksRunning   != info.tasksRunning
+        || _lastContent.tasksPending   != info.tasksPending;
 }
 
-void DisplayManager::partialRefresh() {
-    // Handled inline by display methods
-}
-
-void DisplayManager::incrementPartialCount() { _partialCount++; }
-
-bool DisplayManager::needsFullRefresh() const {
-    return _partialCount >= FULL_REFRESH_INTERVAL;
+void DisplayManager::_updateContentCache(const AgentDisplayInfo& info) {
+    strncpy(_lastContent.stateName, info.stateName ? info.stateName : "", 15); _lastContent.stateName[15] = '\0';
+    strncpy(_lastContent.agentName, info.agentName ? info.agentName : "", 31); _lastContent.agentName[31] = '\0';
+    strncpy(_lastContent.tool,      info.tool      ? info.tool      : "", 19); _lastContent.tool[19]      = '\0';
+    strncpy(_lastContent.file,      info.file      ? info.file      : "", 31); _lastContent.file[31]      = '\0';
+    _lastContent.activeSessions = info.activeSessions;
+    _lastContent.hasTasks       = info.hasTasks;
+    _lastContent.tasksDone      = info.tasksDone;
+    _lastContent.tasksRunning   = info.tasksRunning;
+    _lastContent.tasksPending   = info.tasksPending;
+    _contentCacheValid = true;
 }
 
 void DisplayManager::drawCenteredText(const char* text, int y, const uint8_t* font) {
@@ -141,7 +150,7 @@ void DisplayManager::showWelcome(const String& version, const String& mac) {
             }
         } while (_display->nextPage());
 
-        _partialCount = 0;
+        _contentCacheValid = false;
         xSemaphoreGive(_mutex);
     }
 }
@@ -180,7 +189,7 @@ void DisplayManager::showAPMode(const String& ssid, const String& ip) {
             drawCenteredText("3. Configure your WiFi network", 118, u8g2_font_helvR08_tr);
         } while (_display->nextPage());
 
-        _partialCount = 0;
+        _contentCacheValid = false;
         xSemaphoreGive(_mutex);
     }
 }
@@ -269,22 +278,23 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
     }
 
     if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
+        // Skip redraw if content hasn't meaningfully changed
+        if (_contentCacheValid && !_hasContentChanged(info) && !_forceFullRefresh) {
+            xSemaphoreGive(_mutex);
+            return;
+        }
+
         // Anti-ghosting: deep clean when switching from a different screen type
         if (_lastScreenType != 1) {
             deepClean();
             _lastScreenType = 1;
         }
 
-        // Force full refresh if requested (periodic anti-ghosting or after wake)
-        bool doFull = needsFullRefresh() || _forceFullRefresh;
         _forceFullRefresh = false;
+        _updateContentCache(info);
 
-        if (doFull) {
-            _display->setFullWindow();
-        } else {
-            _display->setPartialWindow(0, 0, DISP_WIDTH, DISP_HEIGHT);
-        }
-
+        // Always full refresh — partial refresh causes display fade over time
+        _display->setFullWindow();
         _display->firstPage();
         do {
             _display->fillScreen(GxEPD_WHITE);
@@ -309,9 +319,11 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
             _u8g2.setCursor(labelX, 86);
             _u8g2.print(info.stateName);
 
-            // Session elapsed time in sidebar
-            if (info.elapsedMs > 0) {
-                char elapsed[12];
+            // Show elapsed time only on completion — not during active work
+            bool isCompleted = info.stateName &&
+                               strcmp(info.stateName, "Completed") == 0;
+            if (isCompleted && info.elapsedMs > 0) {
+                char elapsed[14];
                 unsigned long es = info.elapsedMs / 1000;
                 if (es < 60) snprintf(elapsed, sizeof(elapsed), "%lus", es);
                 else if (es < 3600) snprintf(elapsed, sizeof(elapsed), "%lum%02lus", es/60, es%60);
@@ -429,12 +441,6 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
 
         } while (_display->nextPage());
 
-        if (doFull) {
-            _partialCount = 0;
-        } else {
-            _partialCount++;
-        }
-
         xSemaphoreGive(_mutex);
     }
     esp_task_wdt_reset();
@@ -510,7 +516,7 @@ void DisplayManager::showPermissionRequest(const char* agentName, const char* to
 
         } while (_display->nextPage());
 
-        _partialCount = 0;
+        _contentCacheValid = false;
         xSemaphoreGive(_mutex);
     }
 }
@@ -569,7 +575,7 @@ void DisplayManager::showDeviceInfo(const String& ip, const String& mac,
 
         } while (_display->nextPage());
 
-        _partialCount = 0;
+        _contentCacheValid = false;
         xSemaphoreGive(_mutex);
     }
 }
@@ -580,14 +586,8 @@ void DisplayManager::showTimeMode(const String& time, const String& date) {
 
     if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
         _lastScreenType = 4;
-        bool doFull = needsFullRefresh();
-
-        if (doFull) {
-            _display->setFullWindow();
-        } else {
-            _display->setPartialWindow(0, 0, DISP_WIDTH, DISP_HEIGHT);
-        }
-
+        _forceFullRefresh = false;
+        _display->setFullWindow();
         _display->firstPage();
         do {
             _display->fillScreen(GxEPD_WHITE);
@@ -599,9 +599,6 @@ void DisplayManager::showTimeMode(const String& time, const String& date) {
             drawCenteredText(date.c_str(), 105, u8g2_font_helvR10_tr);
 
         } while (_display->nextPage());
-
-        if (doFull) _partialCount = 0;
-        else _partialCount++;
 
         xSemaphoreGive(_mutex);
     }

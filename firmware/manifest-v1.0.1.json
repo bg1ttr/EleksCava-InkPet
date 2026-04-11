@@ -1,6 +1,6 @@
 {
   "name": "InksPet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "home_assistant_domain": "",
   "funding_url": "",
   "new_install_prompt_erase": true,
@@ -10,22 +10,22 @@
       "improv": false,
       "parts": [
         {
-          "path": "bootloader-v1.0.0-2604102243.bin",
+          "path": "bootloader-v1.0.1-2604111305.bin",
           "offset": "0x1000",
           "size": 17536
         },
         {
-          "path": "partitions-v1.0.0-2604102243.bin",
+          "path": "partitions-v1.0.1-2604111305.bin",
           "offset": "0x8000",
           "size": 3072
         },
         {
-          "path": "firmware-v1.0.0-2604102243.bin",
+          "path": "firmware-v1.0.1-2604111305.bin",
           "offset": "0x10000",
-          "size": 1025440
+          "size": 1027952
         },
         {
-          "path": "spiffs-v1.0.0-2604102243.bin",
+          "path": "spiffs-v1.0.1-2604111305.bin",
           "offset": "0x310000",
           "size": 917504
         }
