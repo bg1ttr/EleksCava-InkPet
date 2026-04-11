@@ -2,6 +2,13 @@
 
 All notable changes to InksPet firmware will be documented here.
 
+## [1.0.2] - 2026-04-11
+
+### Changed
+- Version bump to validate release pipeline (no functional changes)
+
+---
+
 ## [1.0.1] - 2026-04-11
 
 ### Fixed
