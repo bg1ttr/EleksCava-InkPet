@@ -2,6 +2,44 @@
 
 All notable changes to InksPet firmware will be documented here.
 
+## [1.1.0] - 2026-04-18
+
+### Added
+- **Bluetooth LE integration with Claude desktop Hardware Buddy**
+  - NimBLE-based Nordic UART Service advertising as `Claude-XXXX`
+  - Full implementation of the [claude-desktop-buddy BLE protocol](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md):
+    heartbeat snapshot, turn events, time sync, owner name, status ack, unpair, folder push
+  - LE Secure Connections + MITM bonding with 6-digit passkey displayed on the e-paper
+  - Physical-button permission flow — A/B/C answer tool requests, decision routed back
+    as `{cmd:permission,decision:once|deny}` over BLE
+- **Buddy HUD** on the e-paper — renders the upstream-authoritative `msg` one-liner,
+  `Today: X.XK tokens`, and up to 3 recent transcript entries, with `bonded` indicator
+- **GIF character pack support** — drag a pack folder into the Hardware Buddy window,
+  device receives it over BLE, writes to LittleFS, hot-reloads the renderer; AnimatedGIF
+  decoder pipes into a 1-bit Bayer-8×8 dithered framebuffer
+- **Chinese text rendering** — HUD and permission screen auto-switch to
+  `u8g2_font_wqy12_t_chinese2` when content contains multi-byte UTF-8; UTF-8-safe
+  truncation prevents mid-codepoint garbage
+- **Permission source tagging** — requests from BLE vs HTTP are tracked per-entry
+  so button decisions reply back on the correct transport (no more cross-channel leakage)
+
+### Changed
+- `ArduinoJson` inbound buffer 4KB → 6KB to accommodate larger turn events
+- `BuddySnapshot.msg` 24B → 64B; `promptHint` 44B → 64B
+- HUD de-duplicates redraws when the snapshot fingerprint matches the last render
+
+### Fixed
+- Idle Claude Desktop snapshot (`running=0 waiting=0`) no longer fabricates a THINKING
+  event — stale sessions age out via existing 30s session timeout
+- UTF-8 text buffer overflow at multibyte boundaries no longer produces trailing
+  replacement characters (`�`)
+
+### Footprint
+- Flash: 31% → 41% (NimBLE stack + Chinese font, still ample headroom)
+- RAM: 24.9% unchanged — NimBLE and WiFi co-exist cleanly
+
+---
+
 ## [1.0.2] - 2026-04-11
 
 ### Changed
