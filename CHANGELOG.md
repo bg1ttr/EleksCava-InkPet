@@ -2,6 +2,19 @@
 
 All notable changes to InksPet firmware will be documented here.
 
+## [1.1.1] - 2026-04-18
+
+### Fixed
+- **Status ack now accepted by Claude desktop** — the `{cmd:"status"}` response
+  was silently dropped with "No response" in the Hardware Buddy window. Root
+  cause: we included a non-standard `fw` field and omitted `bat.mA`. Now the
+  ack strictly matches the REFERENCE.md schema (all documented keys present
+  with zero defaults where InksPet lacks a sensor; no extra fields).
+- Added diagnostic logging of the serialised ack payload so future schema
+  drifts are visible in serial output.
+
+---
+
 ## [1.1.0] - 2026-04-18
 
 ### Added

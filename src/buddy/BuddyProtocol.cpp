@@ -229,26 +229,29 @@ void BuddyProtocol::sendPermissionDecision(const char* id, const char* decision)
 }
 
 void BuddyProtocol::sendStatusAck() {
-    // Build a status response that echoes the upstream shape.
-    // Fields InksPet cannot provide are omitted (the spec allows this):
-    //   bat.mA (no current sensor), stats.vel/nap come from BuddyStats.
+    // Shape exactly matches REFERENCE.md — no extra fields, all documented
+    // keys present (with zero defaults where InksPet lacks a sensor).
+    // Non-standard fields can cause strict JSON schema checks on the desktop
+    // side to silently drop the ack, which surfaces as "No response" in the
+    // Hardware Buddy window.
     DynamicJsonDocument doc(512);
     doc["ack"] = "status";
     doc["ok"]  = true;
     JsonObject data = doc.createNestedObject("data");
 
     const char* pn = BuddyStats::getInstance()->getPetName();
-    data["name"]    = pn[0] ? pn : BleBridge::getInstance()->getDeviceName();
-    data["sec"]     = BleBridge::getInstance()->isSecured();
-    data["fw"]      = VERSION;
+    data["name"] = pn[0] ? pn : BleBridge::getInstance()->getDeviceName();
+    data["sec"]  = BleBridge::getInstance()->isSecured();
 
-    // Battery
+    // Battery — omit nothing; InksPet has no current shunt nor USB-detect
+    // pin wired so mA/usb are best-effort zeros (REFERENCE.md: "mA negative
+    // means charging" — 0 reads as "idle").
     BatteryManager* bat = BatteryManager::getInstance();
     JsonObject b = data.createNestedObject("bat");
     b["pct"] = bat->getPercentage();
     b["mV"]  = (int)(bat->getVoltage() * 1000.0f);
+    b["mA"]  = 0;
     b["usb"] = bat->isCharging();
-    // mA omitted — no shunt.
 
     // System
     JsonObject sys = data.createNestedObject("sys");
@@ -267,5 +270,7 @@ void BuddyProtocol::sendStatusAck() {
     char out[600];
     size_t written = serializeJson(doc, out, sizeof(out) - 1);
     out[written++] = '\n';
+    out[written] = 0;
+    LOG_INFO(TAG, "status ack payload (%u B): %s", (unsigned)written - 1, out);
     BleBridge::getInstance()->write(reinterpret_cast<const uint8_t*>(out), written);
 }
