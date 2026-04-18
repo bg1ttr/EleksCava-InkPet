@@ -13,6 +13,7 @@ DisplayManager::DisplayManager()
       _contentCacheValid(false) {
     _mutex = xSemaphoreCreateMutex();
     memset(&_lastContent, 0, sizeof(_lastContent));
+    memset(&_lastHud, 0, sizeof(_lastHud));
 }
 
 // Power down e-paper panel (idle state — extends panel lifespan)
@@ -436,6 +437,176 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
             }
 
             // Restore colors
+            _u8g2.setForegroundColor(GxEPD_BLACK);
+            _u8g2.setBackgroundColor(GxEPD_WHITE);
+
+        } while (_display->nextPage());
+
+        xSemaphoreGive(_mutex);
+    }
+    esp_task_wdt_reset();
+}
+
+// ---- Buddy HUD (BLE snapshot driven) ----
+// Leverages the upstream protocol's richer fields (msg / tokens_today / entries)
+// that the generic showAgentState() path can't see.
+// Layout mirrors showAgentState()'s left sidebar so state+pixel-art stay
+// recognizable, but the right column is dedicated to live snapshot content.
+bool DisplayManager::_hudChanged(const BuddyHudInfo& info) const {
+    if (!_lastHud.valid) return true;
+    const char* sn = info.stateName ? info.stateName : "";
+    const char* mg = info.msg       ? info.msg       : "";
+    if (strncmp(_lastHud.stateName, sn, sizeof(_lastHud.stateName)) != 0) return true;
+    if (strncmp(_lastHud.msg,       mg, sizeof(_lastHud.msg))       != 0) return true;
+    if (_lastHud.tokensToday != info.tokensToday) return true;
+    if (_lastHud.secured     != info.secured)     return true;
+    uint8_t n = info.nEntries > 3 ? 3 : info.nEntries;
+    if (_lastHud.nEntries != n) return true;
+    for (uint8_t i = 0; i < n; i++) {
+        const char* e = info.entries[i] ? info.entries[i] : "";
+        if (strncmp(_lastHud.entries[i], e, sizeof(_lastHud.entries[i])) != 0) return true;
+    }
+    return false;
+}
+
+void DisplayManager::_updateHudCache(const BuddyHudInfo& info) {
+    strncpy(_lastHud.stateName, info.stateName ? info.stateName : "",
+            sizeof(_lastHud.stateName) - 1);
+    _lastHud.stateName[sizeof(_lastHud.stateName) - 1] = 0;
+    strncpy(_lastHud.msg, info.msg ? info.msg : "", sizeof(_lastHud.msg) - 1);
+    _lastHud.msg[sizeof(_lastHud.msg) - 1] = 0;
+    _lastHud.tokensToday = info.tokensToday;
+    _lastHud.nEntries = info.nEntries > 3 ? 3 : info.nEntries;
+    for (uint8_t i = 0; i < _lastHud.nEntries; i++) {
+        strncpy(_lastHud.entries[i], info.entries[i] ? info.entries[i] : "",
+                sizeof(_lastHud.entries[i]) - 1);
+        _lastHud.entries[i][sizeof(_lastHud.entries[i]) - 1] = 0;
+    }
+    _lastHud.secured = info.secured;
+    _lastHud.valid = true;
+}
+
+void DisplayManager::showBuddyHUD(const BuddyHudInfo& info) {
+    if (!_initialized) return;
+    esp_task_wdt_reset();
+
+    // Claude Desktop sends a keepalive snapshot every ~10s even when nothing
+    // changed. E-paper can't take a full refresh every 10s — dedupe here.
+    if (!_forceFullRefresh && !_hudChanged(info)) {
+        return;
+    }
+
+    Serial.printf("[INFO][Display] Buddy HUD: state='%s' msg='%s' today=%u entries=%u\n",
+                  info.stateName ? info.stateName : "?",
+                  info.msg ? info.msg : "",
+                  (unsigned)info.tokensToday,
+                  (unsigned)info.nEntries);
+
+    if (_hibernated) wake();
+
+    if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
+        // Force full refresh on screen-type change (anti-ghosting).
+        if (_lastScreenType != 4) {
+            deepClean();
+            _lastScreenType = 4;
+        }
+        // Invalidate cache so showAgentState() after us will full-refresh.
+        _contentCacheValid = false;
+        _forceFullRefresh = false;
+        _updateHudCache(info);
+
+        _display->setFullWindow();
+        _display->firstPage();
+        do {
+            _display->fillScreen(GxEPD_WHITE);
+
+            // === Left black sidebar (0-62px) ===
+            _display->fillRect(0, 0, 62, DISP_HEIGHT, GxEPD_BLACK);
+            if (info.pixelArt) {
+                _display->drawXBitmap(7, 24, info.pixelArt, 48, 48, GxEPD_WHITE);
+            }
+            _u8g2.setForegroundColor(GxEPD_WHITE);
+            _u8g2.setBackgroundColor(GxEPD_BLACK);
+            _u8g2.setFont(u8g2_font_helvR08_tr);
+            const char* stateName = info.stateName ? info.stateName : "Claude";
+            int16_t labelW = _u8g2.getUTF8Width(stateName);
+            int16_t labelX = (62 - labelW) / 2;
+            if (labelX < 2) labelX = 2;
+            _u8g2.setCursor(labelX, 86);
+            _u8g2.print(stateName);
+            _u8g2.setForegroundColor(GxEPD_BLACK);
+            _u8g2.setBackgroundColor(GxEPD_WHITE);
+
+            // === Right content area (68-292px) ===
+            const int RX = 68;
+            const int16_t MAX_W = DISP_WIDTH - RX - 4;
+
+            // Row 1: upstream msg — this is the authoritative one-line
+            // summary from Claude ("approve: Bash", "3 sessions running", ...).
+            _u8g2.setFont(u8g2_font_helvB10_tr);
+            const char* msg = (info.msg && info.msg[0]) ? info.msg : stateName;
+            char msgBuf[40];
+            strncpy(msgBuf, msg, sizeof(msgBuf) - 1);
+            msgBuf[sizeof(msgBuf) - 1] = 0;
+            while (strlen(msgBuf) > 4 && _u8g2.getUTF8Width(msgBuf) > MAX_W) {
+                msgBuf[strlen(msgBuf) - 1] = 0;
+            }
+            drawTextAt(msgBuf, RX, 16, u8g2_font_helvB10_tr);
+
+            // Row 2: tokens today — formatted short
+            if (info.tokensToday > 0) {
+                char tok[20];
+                uint32_t v = info.tokensToday;
+                if (v >= 1000000)      snprintf(tok, sizeof(tok), "Today: %lu.%luM",
+                                                (unsigned long)(v / 1000000),
+                                                (unsigned long)((v / 100000) % 10));
+                else if (v >= 1000)    snprintf(tok, sizeof(tok), "Today: %lu.%luK",
+                                                (unsigned long)(v / 1000),
+                                                (unsigned long)((v / 100) % 10));
+                else                   snprintf(tok, sizeof(tok), "Today: %lu tokens",
+                                                (unsigned long)v);
+                drawTextAt(tok, RX, 28, u8g2_font_helvR08_tr);
+            }
+
+            // Dotted separator
+            for (int i = RX; i < 292; i += 3) {
+                _display->drawPixel(i, 34, GxEPD_BLACK);
+            }
+
+            // Rows 3-5: up to 3 transcript entries (newest first)
+            _u8g2.setFont(u8g2_font_helvR08_tr);
+            const int16_t entryY[3] = { 48, 62, 76 };
+            uint8_t shown = info.nEntries < 3 ? info.nEntries : 3;
+            for (uint8_t i = 0; i < shown; i++) {
+                if (!info.entries[i] || !info.entries[i][0]) continue;
+                char line[92];
+                // "· " bullet + entry text
+                snprintf(line, sizeof(line), "\xB7 %s", info.entries[i]);
+                while (strlen(line) > 4 && _u8g2.getUTF8Width(line) > MAX_W) {
+                    line[strlen(line) - 1] = 0;
+                }
+                drawTextAt(line, RX, entryY[i], u8g2_font_helvR08_tr);
+            }
+
+            // If no entries, gently remind the user the channel is live.
+            if (shown == 0) {
+                drawTextAt("listening...", RX, 56, u8g2_font_helvR08_tr);
+            }
+
+            // === Bottom black info bar (BLE identity) ===
+            _display->fillRect(0, 112, DISP_WIDTH, 16, GxEPD_BLACK);
+            _u8g2.setForegroundColor(GxEPD_WHITE);
+            _u8g2.setBackgroundColor(GxEPD_BLACK);
+
+            const char* dev = (info.deviceName && info.deviceName[0])
+                            ? info.deviceName : "Claude";
+            drawTextAt(dev, 4, 124, u8g2_font_helvR08_tr);
+
+            const char* secTag = info.secured ? "bonded" : "unsecured";
+            int16_t secW = _u8g2.getUTF8Width(secTag);
+            _u8g2.setCursor(DISP_WIDTH - secW - 4, 124);
+            _u8g2.print(secTag);
+
             _u8g2.setForegroundColor(GxEPD_BLACK);
             _u8g2.setBackgroundColor(GxEPD_WHITE);
 

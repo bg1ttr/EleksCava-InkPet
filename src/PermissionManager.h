@@ -5,11 +5,20 @@
 
 class PermissionManager {
 public:
+    // Where the request came from — drives which reply channel we use
+    // when the user presses a button. BLE prompts need {cmd:permission}
+    // back over NUS; HTTP prompts need the agent-state webhook callback.
+    enum class Source : uint8_t {
+        HTTP = 0,   // Claude Code hook via POST /api/agent/state
+        BLE  = 1,   // Claude Desktop snapshot.prompt over NUS
+    };
+
     static PermissionManager* getInstance();
 
     // Queue a permission request
     void queueRequest(const String& sessionId, const String& agent,
-                      const String& tool, const String& file);
+                      const String& tool, const String& file,
+                      Source source = Source::HTTP);
 
     // Handle button press response
     void handleAllow();
@@ -28,9 +37,15 @@ public:
     const char* getCurrentFile() const;
     const char* getCurrentSession() const;
 
-    // Callback for when a response is ready to send
-    using ResponseCallback = std::function<void(const String& sessionId, const String& action)>;
+    // Callback for when a response is ready to send. The source arg lets
+    // the main firmware route the reply back to the right channel.
+    using ResponseCallback = std::function<void(const String& sessionId,
+                                                const String& action,
+                                                Source source)>;
     void onResponse(ResponseCallback cb) { _responseCallback = cb; }
+
+    // Source of the currently-displayed (head-of-queue) request.
+    Source getCurrentSource() const;
 
 private:
     PermissionManager();
@@ -43,6 +58,7 @@ private:
         String file;
         unsigned long timestamp;
         bool active;
+        Source source;
     };
 
     static const int MAX_QUEUE = MAX_PERMISSION_QUEUE;

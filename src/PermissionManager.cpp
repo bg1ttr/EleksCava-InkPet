@@ -17,7 +17,8 @@ PermissionManager* PermissionManager::getInstance() {
 }
 
 void PermissionManager::queueRequest(const String& sessionId, const String& agent,
-                                      const String& tool, const String& file) {
+                                      const String& tool, const String& file,
+                                      Source source) {
     // Find empty slot
     for (int i = 0; i < MAX_QUEUE; i++) {
         if (!_queue[i].active) {
@@ -26,9 +27,11 @@ void PermissionManager::queueRequest(const String& sessionId, const String& agen
             _queue[i].tool = tool;
             _queue[i].file = file;
             _queue[i].timestamp = millis();
+            _queue[i].source = source;
             _queue[i].active = true;
             _pendingCount++;
-            LOG_INFO(TAG, "Queued permission: %s wants %s on %s",
+            LOG_INFO(TAG, "Queued permission [%s]: %s wants %s on %s",
+                     source == Source::BLE ? "BLE" : "HTTP",
                      agent.c_str(), tool.c_str(), file.c_str());
             return;
         }
@@ -48,6 +51,7 @@ void PermissionManager::queueRequest(const String& sessionId, const String& agen
     _queue[MAX_QUEUE - 1].tool = tool;
     _queue[MAX_QUEUE - 1].file = file;
     _queue[MAX_QUEUE - 1].timestamp = millis();
+    _queue[MAX_QUEUE - 1].source = source;
     _queue[MAX_QUEUE - 1].active = true;
     _pendingCount++;
 }
@@ -62,11 +66,12 @@ void PermissionManager::respond(const String& action) {
     // Find first active request
     for (int i = 0; i < MAX_QUEUE; i++) {
         if (_queue[i].active) {
-            LOG_INFO(TAG, "Response: %s for session %s",
+            LOG_INFO(TAG, "Response [%s]: %s for session %s",
+                     _queue[i].source == Source::BLE ? "BLE" : "HTTP",
                      action.c_str(), _queue[i].sessionId.c_str());
 
             if (_responseCallback) {
-                _responseCallback(_queue[i].sessionId, action);
+                _responseCallback(_queue[i].sessionId, action, _queue[i].source);
             }
 
             _queue[i].active = false;
@@ -104,13 +109,21 @@ void PermissionManager::update() {
                        _queue[i].sessionId.c_str(), defaultAction.c_str());
 
             if (_responseCallback) {
-                _responseCallback(_queue[i].sessionId, defaultAction);
+                _responseCallback(_queue[i].sessionId, defaultAction,
+                                  _queue[i].source);
             }
 
             _queue[i].active = false;
             _pendingCount--;
         }
     }
+}
+
+PermissionManager::Source PermissionManager::getCurrentSource() const {
+    for (int i = 0; i < MAX_QUEUE; i++) {
+        if (_queue[i].active) return _queue[i].source;
+    }
+    return Source::HTTP;
 }
 
 const char* PermissionManager::getCurrentAgent() const {

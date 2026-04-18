@@ -41,6 +41,23 @@ public:
         uint16_t tasksPending;
     };
     void showAgentState(const AgentDisplayInfo& info);
+
+    // BLE / Claude desktop buddy HUD: uses snapshot fields the upstream
+    // protocol provides directly (msg, tokens_today, entries) which are
+    // more informative than the derived state+tool+file shown by the
+    // regular agent state card.
+    struct BuddyHudInfo {
+        const char* stateName;      // display name ("Working", "Attention", ...)
+        const uint8_t* pixelArt;    // 48x48 1-bit XBM
+        const char* msg;            // one-line upstream summary
+        uint32_t tokensToday;       // tokens since local midnight
+        uint8_t  nEntries;
+        const char* entries[4];     // newest first, ≤92 chars each
+        bool secured;               // BLE link is bonded + encrypted
+        const char* deviceName;     // "Claude-XXXX"
+    };
+    void showBuddyHUD(const BuddyHudInfo& info);
+
     void showPermissionRequest(const char* agentName, const char* tool,
                                const char* file);
     void showDeviceInfo(const String& ip, const String& mac,
@@ -87,6 +104,21 @@ private:
 
     bool _hasContentChanged(const AgentDisplayInfo& info) const;
     void _updateContentCache(const AgentDisplayInfo& info);
+
+    // Buddy HUD fingerprint — snapshot-driven so it fires every ~10s even
+    // when nothing changed; dedupe to protect e-paper lifetime.
+    struct BuddyHudCache {
+        char stateName[16];
+        char msg[40];
+        uint32_t tokensToday;
+        uint8_t  nEntries;
+        char entries[3][92];
+        bool secured;
+        bool valid;
+    };
+    BuddyHudCache _lastHud;
+    bool _hudChanged(const BuddyHudInfo& info) const;
+    void _updateHudCache(const BuddyHudInfo& info);
 
     void drawCenteredText(const char* text, int y, const uint8_t* font);
     void drawTextAt(const char* text, int x, int y, const uint8_t* font);

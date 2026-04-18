@@ -10,6 +10,7 @@
 //   - one-shot triggers (heart/dizzy)    → drive a transient override state
 
 #include <Arduino.h>
+#include <functional>
 #include "../AgentStateManager.h"
 
 // 7 official buddy states (matches REFERENCE.md semantics).
@@ -72,6 +73,13 @@ public:
     // Getters for display layer
     const BuddySnapshot& last() const { return _last; }
 
+    // Subscribe to snapshot arrival. Fires inside applySnapshot() after
+    // all domain-level side effects (permission queue, agent state update,
+    // stats bookkeeping) have run, so the callback can safely read
+    // AgentStateManager / PermissionManager state.
+    using SnapshotCallback = std::function<void(const BuddySnapshot&)>;
+    void onSnapshot(SnapshotCallback cb) { _snapshotCb = cb; }
+
 private:
     BuddyStateMapper();
     static BuddyStateMapper* _instance;
@@ -85,4 +93,5 @@ private:
     BuddyState    _oneShot;
     uint32_t      _oneShotUntil;
     bool          _oneShotActive;
+    SnapshotCallback _snapshotCb;
 };

@@ -166,6 +166,7 @@ size_t BleBridge::write(const uint8_t* data, size_t len) {
         delay(4);   // let the BLE stack drain; skipping this drops packets on macOS
     }
     _lastTxMs = millis();
+    LOG_INFO(TAG, "TX notify sent %zu bytes (mtu=%u)", sent, _mtu);
     return sent;
 }
 

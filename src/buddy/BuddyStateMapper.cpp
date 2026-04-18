@@ -45,7 +45,8 @@ void BuddyStateMapper::applySnapshot(const BuddySnapshot& s) {
                 String(s.promptId),
                 String("Claude"),
                 String(s.promptTool[0] ? s.promptTool : "?"),
-                String(s.promptHint));
+                String(s.promptHint),
+                PermissionManager::Source::BLE);
         }
         // When promptId becomes empty, the desktop has resolved it from
         // another surface; let the existing queue drain on timeout or button.
@@ -72,15 +73,27 @@ void BuddyStateMapper::applySnapshot(const BuddySnapshot& s) {
             (p[2] == 'r' || p[2] == 'R')) { msgError = true; break; }
     }
 
-    if (s.promptId[0])         ev["event"] = "PermissionRequest";
-    else if (msgError)         ev["event"] = "PostToolUseFailure";
-    else if (s.waiting > 0)    ev["event"] = "PermissionRequest";
-    else if (s.running > 0)    ev["event"] = "PreToolUse";
-    else if (s.total > 0)      ev["event"] = "UserPromptSubmit";
-    else if (s.recentlyCompleted) ev["event"] = "Stop";
-    else                       ev["event"] = "Stop";
+    // Only push a synthetic event when there's actual activity on the
+    // desktop. `total > 0` alone just means the user has session windows
+    // open — it doesn't mean Claude is generating anything. Fabricating
+    // UserPromptSubmit in that case puts the device into THINKING with
+    // a blue breathing LED while the HUD truthfully says "Idle".
+    const char* eventType = nullptr;
+    if (s.promptId[0])                 eventType = "PermissionRequest";
+    else if (msgError)                 eventType = "PostToolUseFailure";
+    else if (s.waiting > 0)            eventType = "PermissionRequest";
+    else if (s.running > 0)            eventType = "PreToolUse";
+    else if (s.recentlyCompleted)      eventType = "Stop";
+    // else: desktop is open but quiet. Stale 'desktop' sessions age out
+    // via AgentStateManager::cleanupStaleSessions (30s timeout), which
+    // settles display/LED back to IDLE/SLEEPING on their own.
 
-    AgentStateManager::getInstance()->processEvent(ev);
+    if (eventType) {
+        ev["event"] = eventType;
+        AgentStateManager::getInstance()->processEvent(ev);
+    }
+
+    if (_snapshotCb) _snapshotCb(_last);
 }
 
 void BuddyStateMapper::noteApprovalSent(uint32_t tookSeconds) {

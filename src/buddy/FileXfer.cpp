@@ -5,6 +5,7 @@
 #include <string.h>
 #include "BuddyProtocol.h"
 #include "BuddyStats.h"
+#include "EpaperGifRenderer.h"
 #include "../Logger.h"
 
 static const char* TAG = "Xfer";
@@ -198,7 +199,18 @@ bool FileXfer::tryHandle(JsonDocument& doc) {
         // Persist name so next boot loads this character.
         BuddyStats::getInstance()->setCharacterName(_charName);
         LOG_INFO(TAG, "char_end: %s total=%u", _charName, _totalWritten);
-        proto->sendAck("char_end", true, _totalWritten);
+
+        // Hot-reload the GIF pack so the new character takes effect without
+        // a reboot. Returns false if the dropped folder wasn't a valid pack
+        // (no manifest.json) — in which case we ack ok=false so Claude
+        // Desktop knows the push "arrived" but wasn't a usable pack.
+        bool reloadOk = EpaperGifRenderer::getInstance()->reload();
+        if (!reloadOk) {
+            LOG_WARNING(TAG, "Pack %s has no valid manifest.json — ignoring",
+                        _charName);
+        }
+        proto->sendAck("char_end", reloadOk, _totalWritten,
+                       reloadOk ? nullptr : "no manifest.json");
         return true;
     }
 

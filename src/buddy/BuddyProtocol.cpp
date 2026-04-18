@@ -112,6 +112,10 @@ void BuddyProtocol::_handleSnapshot(JsonDocument& doc) {
     // Token bookkeeping for level tracking
     if (s.tokens > 0) BuddyStats::getInstance()->onBridgeTokens(s.tokens);
 
+    LOG_INFO(TAG, "Snap: t=%u r=%u w=%u today=%u msg='%s' lines=%u prompt='%s'",
+             s.total, s.running, s.waiting, s.tokensToday,
+             s.msg, s.nLines, s.promptId);
+
     BuddyStateMapper::getInstance()->applySnapshot(s);
 }
 

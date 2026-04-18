@@ -92,7 +92,8 @@ static char     lastBlePromptId[40] = {0};
 // Forward declarations
 // =============================================================================
 static void onAgentStateChange(AgentState state, const AgentSession* session);
-static void onPermissionResponse(const String& sessionId, const String& action);
+static void onPermissionResponse(const String& sessionId, const String& action,
+                                 PermissionManager::Source source);
 static void handleKeyEvent(KeyEvent event);
 static void handleKeyEventAPMode(KeyEvent event);
 static void updateDisplayForCurrentMode();
@@ -420,29 +421,41 @@ static void onAgentStateChange(AgentState state, const AgentSession* session) {
         // A character pack is installed — the GIF renderer owns the screen.
         // Skip the pixel-art state card; the next gifRenderer->tick() will
         // paint the appropriate clip for the new state.
+    } else if (buddyMapper && buddyMapper->isDataConnected()) {
+        // BLE (Claude Desktop) path — the snapshot callback will render
+        // the Buddy HUD. Skip the generic agent-state card to avoid
+        // flickering between two layouts on each state transition.
     } else {
         display->showAgentState(buildAgentDisplayInfo(state, session));
     }
 }
 
 // =============================================================================
-// Permission response callback
+// Permission response callback — routes back to whichever channel the
+// request originally arrived on. Cross-channel replies (a BLE decision
+// sent over HTTP, or vice versa) are silently wrong, so Source must be
+// honoured here even when both transports are connected.
 // =============================================================================
-static void onPermissionResponse(const String& sessionId, const String& action) {
-    LOG_INFO(TAG, "Permission response: session=%s action=%s",
+static void onPermissionResponse(const String& sessionId, const String& action,
+                                 PermissionManager::Source source) {
+    LOG_INFO(TAG, "Permission response [%s]: session=%s action=%s",
+             source == PermissionManager::Source::BLE ? "BLE" : "HTTP",
              sessionId.c_str(), action.c_str());
 
-    // Forward response to the agent state manager for webhook relay
+    // Always update the local state manager — it's the display authority
+    // regardless of which transport the request came in on.
     agentMgr->respondToPermission(sessionId, action);
 
-    // Buddy protocol — if the session id came from a BLE snapshot prompt,
-    // emit the upstream-compatible response. Upstream only accepts "once"
-    // and "deny" as decision values; we map "allow"/"always_allow" to "once".
-    if (ble && ble->isConnected() && buddyProto) {
-        const char* decision = (action == "deny") ? "deny" : "once";
-        buddyProto->sendPermissionDecision(sessionId.c_str(), decision);
+    if (source == PermissionManager::Source::BLE) {
+        // Upstream accepts only "once" / "deny". Map our richer HTTP
+        // vocabulary down: allow/always_allow → once.
+        if (ble && ble->isConnected() && buddyProto) {
+            const char* decision = (action == "deny") ? "deny" : "once";
+            buddyProto->sendPermissionDecision(sessionId.c_str(), decision);
+        }
 
-        // Stats: approvals get velocity tracking; <5s approvals trigger HEART.
+        // Velocity + level stats only count BLE-driven approvals (that's
+        // what the upstream "lvl" scheme measures).
         if (action != "deny") {
             uint32_t tookS = 0;
             if (promptArrivedMs) tookS = (millis() - promptArrivedMs) / 1000;
@@ -455,8 +468,10 @@ static void onPermissionResponse(const String& sessionId, const String& action) 
         promptArrivedMs = 0;
         lastBlePromptId[0] = 0;
     }
+    // HTTP source: respondToPermission above is all we need — the HTTP
+    // webhook handler picks up the session state change on its own.
 
-    // Play confirmation sound
+    // Play confirmation sound regardless of source
     if (!config->getDndMode()) {
         if (action == "deny") {
             buzzer->playError();
@@ -891,6 +906,32 @@ static void initPostWiFi() {
             mapStateToLed(agentMgr->getCurrentState());
         }
     });
+    // When a fresh snapshot lands, render the Buddy HUD using the upstream
+    // fields (msg, tokens_today, entries) that carry richer information
+    // than our derived state enum.
+    buddyMapper->onSnapshot([](const BuddySnapshot& s) {
+        if (currentDisplayMode != DisplayMode::AGENT_STATE) return;
+        if (permMgr->hasPending()) return;                // permission screen wins
+        if (gifRenderer && gifRenderer->hasCharacterPack()) return;  // GIF owns screen
+
+        BuddyState bs = buddyMapper->currentBuddyState();
+        AgentState as = BuddyStateMapper::buddyToAgent(bs);
+        const char* sn = AgentStateManager::stateToString(as);
+
+        DisplayManager::BuddyHudInfo hud = {};
+        hud.stateName   = AgentStateManager::stateToDisplayName(as);
+        hud.pixelArt    = getPixelArtForState(sn);
+        hud.msg         = s.msg;
+        hud.tokensToday = s.tokensToday;
+        hud.nEntries    = s.nLines > 4 ? 4 : s.nLines;
+        for (uint8_t i = 0; i < hud.nEntries; i++) {
+            hud.entries[i] = s.lines[i];
+        }
+        hud.secured    = ble ? ble->isSecured() : false;
+        hud.deviceName = ble ? ble->getDeviceName() : "Claude";
+        display->showBuddyHUD(hud);
+    });
+
     ble->onPasskey([](uint32_t key) {
         LOG_INFO(TAG, "Show passkey to user: %06lu", (unsigned long)key);
         // Render the 6-digit passkey on the e-paper so the user can type it
