@@ -28,6 +28,11 @@
 #include "AgentStateManager.h"
 #include "PermissionManager.h"
 #include "PixelArt.h"
+#include "buddy/BleBridge.h"
+#include "buddy/BuddyProtocol.h"
+#include "buddy/BuddyStats.h"
+#include "buddy/BuddyStateMapper.h"
+#include "buddy/EpaperGifRenderer.h"
 
 static const char* TAG = "MAIN";
 
@@ -72,6 +77,16 @@ static InksPetWebServer*   webServer    = nullptr;
 static AgentStateManager* agentMgr     = nullptr;
 static PermissionManager* permMgr      = nullptr;
 static MemoryMonitor*     memMonitor   = nullptr;
+static BleBridge*         ble          = nullptr;
+static BuddyProtocol*     buddyProto   = nullptr;
+static BuddyStats*        buddyStats   = nullptr;
+static BuddyStateMapper*  buddyMapper  = nullptr;
+static EpaperGifRenderer* gifRenderer  = nullptr;
+
+// Track the timestamp of the most recent BLE-originated permission request
+// so we can compute "seconds to respond" for buddy stats.
+static uint32_t promptArrivedMs = 0;
+static char     lastBlePromptId[40] = {0};
 
 // =============================================================================
 // Forward declarations
@@ -246,6 +261,17 @@ void loop() {
     // ---- 8. Permission timeout check ----
     permMgr->update();
 
+    // ---- 8b. Drain BLE inbound + drive animation frames ----
+    if (ble) ble->poll();
+    // GIF renderer only runs when a character pack is installed and the user
+    // hasn't flipped to a different screen (device info / time) or received
+    // a permission request (that screen carries tool/file text).
+    if (gifRenderer && gifRenderer->hasCharacterPack() &&
+        currentDisplayMode == DisplayMode::AGENT_STATE &&
+        !permMgr->hasPending()) {
+        gifRenderer->tick();
+    }
+
     // ---- 9. Agent session cleanup (stale sessions) ----
     agentMgr->cleanupStaleSessions();
 
@@ -349,6 +375,13 @@ static void onAgentStateChange(AgentState state, const AgentSession* session) {
     // Update LED effect + color based on state
     mapStateToLed(state);
 
+    // Note prompt-arrival time for velocity stats (<5s = heart trigger).
+    if (state == AgentState::PERMISSION && promptArrivedMs == 0) {
+        promptArrivedMs = millis();
+    } else if (state != AgentState::PERMISSION) {
+        promptArrivedMs = 0;
+    }
+
     // Play buzzer sounds for notable transitions
     if (!config->getDndMode()) {
         switch (state) {
@@ -383,6 +416,10 @@ static void onAgentStateChange(AgentState state, const AgentSession* session) {
             permMgr->getCurrentTool(),
             permMgr->getCurrentFile()
         );
+    } else if (gifRenderer && gifRenderer->hasCharacterPack()) {
+        // A character pack is installed — the GIF renderer owns the screen.
+        // Skip the pixel-art state card; the next gifRenderer->tick() will
+        // paint the appropriate clip for the new state.
     } else {
         display->showAgentState(buildAgentDisplayInfo(state, session));
     }
@@ -397,6 +434,27 @@ static void onPermissionResponse(const String& sessionId, const String& action) 
 
     // Forward response to the agent state manager for webhook relay
     agentMgr->respondToPermission(sessionId, action);
+
+    // Buddy protocol — if the session id came from a BLE snapshot prompt,
+    // emit the upstream-compatible response. Upstream only accepts "once"
+    // and "deny" as decision values; we map "allow"/"always_allow" to "once".
+    if (ble && ble->isConnected() && buddyProto) {
+        const char* decision = (action == "deny") ? "deny" : "once";
+        buddyProto->sendPermissionDecision(sessionId.c_str(), decision);
+
+        // Stats: approvals get velocity tracking; <5s approvals trigger HEART.
+        if (action != "deny") {
+            uint32_t tookS = 0;
+            if (promptArrivedMs) tookS = (millis() - promptArrivedMs) / 1000;
+            if (buddyStats)  buddyStats->onApproval(tookS);
+            if (buddyMapper) buddyMapper->noteApprovalSent(tookS);
+        } else {
+            if (buddyStats)  buddyStats->onDenial();
+            if (buddyMapper) buddyMapper->noteDenialSent();
+        }
+        promptArrivedMs = 0;
+        lastBlePromptId[0] = 0;
+    }
 
     // Play confirmation sound
     if (!config->getDndMode()) {
@@ -812,6 +870,42 @@ static void initPostWiFi() {
     permMgr = PermissionManager::getInstance();
     permMgr->onResponse(onPermissionResponse);
     LOG_INFO(TAG, "Permission manager configured");
+
+    // ---- 18b. Claude desktop buddy (BLE) subsystem ----
+    buddyStats = BuddyStats::getInstance();
+    buddyStats->begin();
+
+    buddyMapper = BuddyStateMapper::getInstance();
+    buddyProto  = BuddyProtocol::getInstance();
+    buddyProto->begin();
+
+    ble = BleBridge::getInstance();
+    ble->onLine([](const char* line, size_t len) {
+        buddyProto->feedLine(line, len);
+    });
+    ble->onConnect([](bool connected, bool secured) {
+        LOG_INFO(TAG, "BLE peer %s (secured=%d)",
+                 connected ? "connected" : "disconnected", secured);
+        if (connected && secured) {
+            // Remind the LED a peer is bonded; passkey screen should be gone.
+            mapStateToLed(agentMgr->getCurrentState());
+        }
+    });
+    ble->onPasskey([](uint32_t key) {
+        LOG_INFO(TAG, "Show passkey to user: %06lu", (unsigned long)key);
+        // Render the 6-digit passkey on the e-paper so the user can type it
+        // into the Hardware Buddy window.
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Pair: %06lu", (unsigned long)key);
+        display->showMessage(msg);
+        led->setEffect(LedEffect::BREATHING, LedColors::BLUE);
+    });
+    ble->begin();
+    LOG_INFO(TAG, "BLE bridge running as %s", ble->getDeviceName());
+
+    // ---- 18c. Character pack renderer (runs only if a pack is installed) ----
+    gifRenderer = EpaperGifRenderer::getInstance();
+    gifRenderer->begin();
 
     // ---- Memory monitor ----
     memMonitor = MemoryMonitor::getInstance();

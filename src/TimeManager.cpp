@@ -2,6 +2,7 @@
 #include "ConfigManager.h"
 #include "Logger.h"
 #include <time.h>
+#include <sys/time.h>
 
 static const char* TAG = "Time";
 TimeManager* TimeManager::_instance = nullptr;
@@ -79,6 +80,17 @@ int TimeManager::getCurrentHour() const {
 }
 
 bool TimeManager::isTimeValid() const { return _synced; }
+
+void TimeManager::setTimeFromEpoch(uint32_t epoch, int32_t tzOffsetSec) {
+    struct timeval tv = { (time_t)epoch, 0 };
+    settimeofday(&tv, nullptr);
+    _gmtOffset = tzOffsetSec;
+    // configTime re-applies tz/dst without re-contacting NTP servers.
+    configTime(_gmtOffset, 0, "pool.ntp.org");
+    _synced = true;
+    _lastSync = millis();
+    LOG_INFO(TAG, "Time set from BLE: epoch=%u tz=%d", epoch, (int)tzOffsetSec);
+}
 
 void TimeManager::update() {
     // Re-sync every hour
