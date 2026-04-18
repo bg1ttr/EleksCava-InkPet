@@ -574,7 +574,7 @@ void DisplayManager::showBuddyHUD(const BuddyHudInfo& info) {
             // string carries multibyte UTF-8.
             const char* msg = (info.msg && info.msg[0]) ? info.msg : stateName;
             const uint8_t* msgFont = containsNonAscii(msg)
-                                   ? u8g2_font_wqy12_t_chinese1
+                                   ? u8g2_font_wqy12_t_chinese2
                                    : u8g2_font_helvB10_tr;
             _u8g2.setFont(msgFont);
             char msgBuf[70];
@@ -613,7 +613,7 @@ void DisplayManager::showBuddyHUD(const BuddyHudInfo& info) {
                 // "· " bullet + entry text (UTF-8 middle dot)
                 snprintf(line, sizeof(line), "\xC2\xB7 %s", info.entries[i]);
                 const uint8_t* entryFont = containsNonAscii(info.entries[i])
-                                         ? u8g2_font_wqy12_t_chinese1
+                                         ? u8g2_font_wqy12_t_chinese2
                                          : u8g2_font_helvR08_tr;
                 _u8g2.setFont(entryFont);
                 u8g2FitTrim(_u8g2, line, MAX_W);
@@ -671,25 +671,34 @@ void DisplayManager::showPermissionRequest(const char* agentName, const char* to
             _u8g2.setBackgroundColor(GxEPD_WHITE);
 
             // === Content area ===
-            char line1[64];
-            snprintf(line1, sizeof(line1), "%s wants to:", agentName);
-            drawTextAt(line1, 8, 36, u8g2_font_helvR08_tr);
+            char line1[96];
+            snprintf(line1, sizeof(line1), "%s wants to:",
+                     agentName ? agentName : "Agent");
+            const uint8_t* headerFont = containsNonAscii(line1)
+                                      ? u8g2_font_wqy12_t_chinese2
+                                      : u8g2_font_helvR08_tr;
+            _u8g2.setFont(headerFont);
+            u8g2FitTrim(_u8g2, line1, DISP_WIDTH - 16);
+            drawTextAt(line1, 8, 36, headerFont);
 
             // Tool + file in highlighted black box
             _display->fillRect(8, 42, 280, 20, GxEPD_BLACK);
             _u8g2.setForegroundColor(GxEPD_WHITE);
             _u8g2.setBackgroundColor(GxEPD_BLACK);
-            char toolLine[80];
+            char toolLine[128];
             if (file && strlen(file) > 0) {
-                String filePath(file);
-                if (filePath.length() > 30) {
-                    filePath = "..." + filePath.substring(filePath.length() - 27);
-                }
-                snprintf(toolLine, sizeof(toolLine), "%s  %s", tool, filePath.c_str());
+                snprintf(toolLine, sizeof(toolLine), "%s  %s",
+                         tool ? tool : "?", file);
             } else {
-                snprintf(toolLine, sizeof(toolLine), "%s", tool);
+                snprintf(toolLine, sizeof(toolLine), "%s", tool ? tool : "?");
             }
-            drawTextAt(toolLine, 14, 56, u8g2_font_helvB08_tr);
+            const uint8_t* toolFont = containsNonAscii(toolLine)
+                                    ? u8g2_font_wqy12_t_chinese2
+                                    : u8g2_font_helvB08_tr;
+            _u8g2.setFont(toolFont);
+            // Highlight box usable width = 280 - 12 padding = 268
+            u8g2FitTrim(_u8g2, toolLine, 268);
+            drawTextAt(toolLine, 14, 56, toolFont);
             _u8g2.setForegroundColor(GxEPD_BLACK);
             _u8g2.setBackgroundColor(GxEPD_WHITE);
 
