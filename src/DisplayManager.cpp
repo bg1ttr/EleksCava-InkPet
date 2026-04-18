@@ -452,6 +452,33 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
 // that the generic showAgentState() path can't see.
 // Layout mirrors showAgentState()'s left sidebar so state+pixel-art stay
 // recognizable, but the right column is dedicated to live snapshot content.
+// Returns true if the string contains any non-ASCII byte — triggers a
+// CJK-capable font swap. Snapshot msg/entries from Claude Desktop may be
+// Chinese prompt text; the default helv_*_tr fonts only ship ASCII glyphs
+// so Chinese bytes render as tofu/boxes. wqy12_t_chinese1 covers ~1000
+// common CJK ideographs at 12px.
+static bool containsNonAscii(const char* s) {
+    if (!s) return false;
+    while (*s) {
+        if ((uint8_t)*s & 0x80) return true;
+        s++;
+    }
+    return false;
+}
+
+// Trim buf from the tail at a UTF-8 codepoint boundary until the U8g2
+// width measurement fits `maxW`. Prevents partial-multibyte tofu when
+// cropping Chinese text to a fixed pixel column.
+static void u8g2FitTrim(U8G2_FOR_ADAFRUIT_GFX& u8g2, char* buf, int16_t maxW) {
+    while (buf[0] && u8g2.getUTF8Width(buf) > maxW) {
+        size_t n = strlen(buf);
+        if (n == 0) break;
+        n--;
+        while (n > 0 && ((uint8_t)buf[n] & 0xC0) == 0x80) n--;
+        buf[n] = 0;
+    }
+}
+
 bool DisplayManager::_hudChanged(const BuddyHudInfo& info) const {
     if (!_lastHud.valid) return true;
     const char* sn = info.stateName ? info.stateName : "";
@@ -542,16 +569,19 @@ void DisplayManager::showBuddyHUD(const BuddyHudInfo& info) {
             const int16_t MAX_W = DISP_WIDTH - RX - 4;
 
             // Row 1: upstream msg — this is the authoritative one-line
-            // summary from Claude ("approve: Bash", "3 sessions running", ...).
-            _u8g2.setFont(u8g2_font_helvB10_tr);
+            // summary from Claude ("approve: Bash", "3 sessions running",
+            // "你能读取gmail", ...). Swap to the CJK-capable font when the
+            // string carries multibyte UTF-8.
             const char* msg = (info.msg && info.msg[0]) ? info.msg : stateName;
-            char msgBuf[40];
+            const uint8_t* msgFont = containsNonAscii(msg)
+                                   ? u8g2_font_wqy12_t_chinese1
+                                   : u8g2_font_helvB10_tr;
+            _u8g2.setFont(msgFont);
+            char msgBuf[70];
             strncpy(msgBuf, msg, sizeof(msgBuf) - 1);
             msgBuf[sizeof(msgBuf) - 1] = 0;
-            while (strlen(msgBuf) > 4 && _u8g2.getUTF8Width(msgBuf) > MAX_W) {
-                msgBuf[strlen(msgBuf) - 1] = 0;
-            }
-            drawTextAt(msgBuf, RX, 16, u8g2_font_helvB10_tr);
+            u8g2FitTrim(_u8g2, msgBuf, MAX_W);
+            drawTextAt(msgBuf, RX, 16, msgFont);
 
             // Row 2: tokens today — formatted short
             if (info.tokensToday > 0) {
@@ -573,19 +603,21 @@ void DisplayManager::showBuddyHUD(const BuddyHudInfo& info) {
                 _display->drawPixel(i, 34, GxEPD_BLACK);
             }
 
-            // Rows 3-5: up to 3 transcript entries (newest first)
-            _u8g2.setFont(u8g2_font_helvR08_tr);
+            // Rows 3-5: up to 3 transcript entries (newest first). Per-row
+            // font choice so mixed ASCII/Chinese entries still look tight.
             const int16_t entryY[3] = { 48, 62, 76 };
             uint8_t shown = info.nEntries < 3 ? info.nEntries : 3;
             for (uint8_t i = 0; i < shown; i++) {
                 if (!info.entries[i] || !info.entries[i][0]) continue;
-                char line[92];
-                // "· " bullet + entry text
-                snprintf(line, sizeof(line), "\xB7 %s", info.entries[i]);
-                while (strlen(line) > 4 && _u8g2.getUTF8Width(line) > MAX_W) {
-                    line[strlen(line) - 1] = 0;
-                }
-                drawTextAt(line, RX, entryY[i], u8g2_font_helvR08_tr);
+                char line[96];
+                // "· " bullet + entry text (UTF-8 middle dot)
+                snprintf(line, sizeof(line), "\xC2\xB7 %s", info.entries[i]);
+                const uint8_t* entryFont = containsNonAscii(info.entries[i])
+                                         ? u8g2_font_wqy12_t_chinese1
+                                         : u8g2_font_helvR08_tr;
+                _u8g2.setFont(entryFont);
+                u8g2FitTrim(_u8g2, line, MAX_W);
+                drawTextAt(line, RX, entryY[i], entryFont);
             }
 
             // If no entries, gently remind the user the channel is live.

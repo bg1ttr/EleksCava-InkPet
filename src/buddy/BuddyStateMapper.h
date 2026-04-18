@@ -31,11 +31,14 @@ struct BuddySnapshot {
     bool     recentlyCompleted;
     uint32_t tokens;
     uint32_t tokensToday;
-    char     msg[24];
+    // msg is UTF-8; one Chinese character takes 3 bytes. 64 bytes fits
+    // ~20 汉字 or ~60 ASCII chars — enough for the upstream one-line
+    // summaries we've seen ("done (success), 3 turns", "你帮我看看邮件").
+    char     msg[64];
     bool     connected;           // derived from dataConnected()
     char     promptId[40];        // "" = no prompt
     char     promptTool[20];
-    char     promptHint[44];
+    char     promptHint[64];
     char     lines[4][92];        // last 4 transcript lines (we cap at 4 for mem)
     uint8_t  nLines;
 };

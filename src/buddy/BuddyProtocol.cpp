@@ -13,6 +13,24 @@
 static const char* TAG = "Buddy";
 BuddyProtocol* BuddyProtocol::_instance = nullptr;
 
+// Copy src into dst (max dstSize-1 bytes) without splitting a UTF-8
+// multi-byte sequence at the tail — avoids trailing 0xEF 0xBF 0xBD replacement
+// chars on the e-paper when an upstream message barely exceeds the buffer.
+static void utf8SafeCopy(char* dst, size_t dstSize, const char* src) {
+    if (!dst || dstSize == 0) return;
+    if (!src) { dst[0] = 0; return; }
+    size_t n = strlen(src);
+    if (n >= dstSize) n = dstSize - 1;
+    // Walk back from n to a valid boundary. A byte starts a new codepoint
+    // if (byte & 0xC0) != 0x80 — i.e. it's ASCII (<0x80) or a start byte
+    // (>=0xC0). Continuation bytes are 10xxxxxx.
+    while (n > 0 && ((uint8_t)src[n] & 0xC0) == 0x80) {
+        n--;
+    }
+    memcpy(dst, src, n);
+    dst[n] = 0;
+}
+
 BuddyProtocol::BuddyProtocol()
     : _lastInboundMs(0), _timeSynced(false), _lastTokensTotal(0) {}
 
@@ -39,7 +57,10 @@ void BuddyProtocol::feedLine(const char* line, size_t len) {
 
     // A single line may be a snapshot, a turn event, or a command.
     // Snapshots don't carry a "cmd"; commands and turn events do.
-    DynamicJsonDocument doc(4096);  // upstream caps turn events at 4KB on the wire
+    // Upstream caps turn events at 4KB on the wire, but after base64+JSON
+    // escaping and ArduinoJson's internal bookkeeping we need headroom;
+    // 4KB doc drops ~1 in 30 turn events with InvalidInput.
+    DynamicJsonDocument doc(6144);
     DeserializationError err = deserializeJson(doc, line, len);
     if (err) {
         LOG_WARNING(TAG, "JSON parse error: %s", err.c_str());
@@ -83,16 +104,15 @@ void BuddyProtocol::_handleSnapshot(JsonDocument& doc) {
     s.tokensToday = (uint32_t)(doc["tokens_today"] | 0);
     s.connected   = true;
 
-    const char* msg = doc["msg"] | "";
-    strncpy(s.msg, msg, sizeof(s.msg) - 1);
+    utf8SafeCopy(s.msg, sizeof(s.msg), doc["msg"] | "");
 
     // prompt {id, tool, hint}
     JsonVariant p = doc["prompt"];
     if (p.is<JsonObject>()) {
         JsonObject po = p.as<JsonObject>();
-        strncpy(s.promptId,   po["id"]   | "",  sizeof(s.promptId)   - 1);
-        strncpy(s.promptTool, po["tool"] | "",  sizeof(s.promptTool) - 1);
-        strncpy(s.promptHint, po["hint"] | "",  sizeof(s.promptHint) - 1);
+        utf8SafeCopy(s.promptId,   sizeof(s.promptId),   po["id"]   | "");
+        utf8SafeCopy(s.promptTool, sizeof(s.promptTool), po["tool"] | "");
+        utf8SafeCopy(s.promptHint, sizeof(s.promptHint), po["hint"] | "");
     }
 
     // entries — last 4 transcript lines
@@ -102,8 +122,7 @@ void BuddyProtocol::_handleSnapshot(JsonDocument& doc) {
         uint8_t n = 0;
         for (JsonVariant v : arr) {
             if (n >= 4) break;
-            const char* txt = v | "";
-            strncpy(s.lines[n], txt, sizeof(s.lines[n]) - 1);
+            utf8SafeCopy(s.lines[n], sizeof(s.lines[n]), v | "");
             n++;
         }
         s.nLines = n;
