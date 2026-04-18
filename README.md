@@ -22,22 +22,25 @@ InksPet is firmware. [EleksCava](https://elekscava.com) is the hardware. Togethe
 
 ## Features
 
+- **Claude Desktop BLE (v1.1.0+)** — Native support for Anthropic's [Hardware Buddy](https://github.com/anthropics/claude-desktop-buddy) protocol. Pair over LE Secure Connections, receive live session snapshots, approve tool calls with physical buttons, receive GIF character packs — see [Claude Desktop Integration](#claude-desktop-integration-v110) below
 - **12 Agent States** — Pixel art Clawd crab with unique pose per state
 - **RGB LED Status** — Blue=thinking, Green=working, Red=error, Yellow=permission
 - **Physical Permission Buttons** — Press A/B/C to approve/deny, zero window switching
+- **Chinese / UTF-8 Text** — HUD and permission screen render Chinese tool names, file paths, and Claude transcript summaries (wqy12 font, ~3000 glyphs)
 - **Tool Call Statistics** — Live Read/Write/Edit/Bash counts + elapsed time + file path
 - **One-Click Hook Setup** — Web dashboard with copy-paste prompt, AI configures itself
 - **DND Mode** — Long-press B to mute LED + buzzer, auto-deny permissions
 - **Captive Portal** — AP mode auto-opens WiFi config page on phone
 - **Web Dashboard** — Real-time status, device config, hook setup at `http://inkspet.local`
 - **Multi-Agent Support** — Track up to 8 concurrent AI agent sessions with priority resolution
+- **Dual-Channel** — HTTP webhooks (Claude Code / Copilot / Codex…) and Claude Desktop BLE run side-by-side with source-tagged permission routing
 - **Open Source** — MIT license, full firmware + web portal
 
 ## Hardware
 
 Based on the [EleksCava](https://elekscava.com) e-paper smart device:
 
-- **MCU**: ESP32 (dual-core 240MHz, 320KB SRAM, WiFi)
+- **MCU**: ESP32 (dual-core 240MHz, 320KB SRAM, **WiFi + Bluetooth LE 4.2**)
 - **Display**: 2.9" e-paper (296 x 128 px, black & white, always-on)
 - **LED**: WS2812B RGB x5 (frosted acrylic diffuser)
 - **Buttons**: 3 physical keys (A / B / C)
@@ -84,36 +87,43 @@ Press **A** to allow, **B** to always allow, or **C** to deny — no window swit
 ## Architecture
 
 ```
-AI Coding Agents                    EleksCava Hardware
-+------------------+               +------------------+
-| Claude Code      |--hook POST--->|                  |
-| Copilot CLI      |--hook POST--->| ESP32 WebServer  |
-| Codex CLI        |--hook POST--->|   port 80        |
-| Gemini CLI       |--hook POST--->|                  |
-| Cursor Agent     |--hook POST--->| AgentStateManager|
-| Kiro CLI         |--hook POST--->|       |          |
-| opencode         |--hook POST--->|       v          |
-+------------------+               | +------+------+  |
-                                   | |E-Paper|  LED|  |
-                                   | +------+------+  |
-                                   +------------------+
+AI Coding Agents (HTTP)                 EleksCava Hardware                      Claude Desktop (BLE)
++------------------+                +---------------------------+             +---------------------+
+| Claude Code      |---hook POST--->|                           |<---BLE------|  Hardware Buddy     |
+| Copilot CLI      |---hook POST--->|   ESP32 WebServer :80     |  NUS        |  (Developer Mode)   |
+| Codex CLI        |---hook POST--->|        +                  |             |                     |
+| Gemini CLI       |---hook POST--->|   NimBLE NUS Server       |             |  snapshot / turn /  |
+| Cursor Agent     |---hook POST--->|        +                  |             |  permission / file  |
+| Kiro CLI         |---hook POST--->|   AgentStateManager       |             |  folder push        |
+| opencode         |---hook POST--->|        +                  |             +---------------------+
++------------------+                |   Buddy HUD renderer      |
+                                    |  +--------+--------+---+  |
+                                    |  | E-Paper | LED  |Btn |  |
+                                    |  +--------+--------+---+  |
+                                    +---------------------------+
 ```
 
 ### Firmware Modules
 
 | Module | Description |
 |--------|-------------|
-| `DisplayManager` | E-paper driver (GxEPD2), sidebar layout, anti-ghosting, font rendering |
+| `DisplayManager` | E-paper driver (GxEPD2), sidebar layout, Buddy HUD, CJK font auto-switch, anti-ghosting |
 | `RGBLed` | WS2812 LED effects (solid, breathing, flash, rainbow, fade) |
 | `AgentStateManager` | State machine, 12 states, priority resolution, multi-session tracking |
-| `PermissionManager` | Permission request queue (max 4), timeout auto-deny, button approval |
+| `PermissionManager` | Permission request queue (max 4), source-tagged (BLE/HTTP), timeout auto-deny |
 | `PixelArt` | 11 Clawd crab XBM bitmaps (48x48, 1-bit) |
 | `WiFiManager` | WiFi STA connection, AP mode, credential storage (NVS) |
 | `InksPetWebServer` | AsyncWebServer, REST API, WebSocket, LittleFS static files |
+| `buddy/BleBridge` | NimBLE Nordic UART Service, LE Secure Connections, passkey bonding |
+| `buddy/BuddyProtocol` | Hardware Buddy JSON line parser, snapshot / turn / cmd / status ack |
+| `buddy/BuddyStateMapper` | Maps official 7-state BLE semantics to InksPet's 12-state enum |
+| `buddy/FileXfer` | Folder-push receiver, base64 chunks → LittleFS, hot-reload GIF renderer |
+| `buddy/BuddyStats` | NVS-backed approvals / denials / velocity / level / owner / pet name |
+| `buddy/EpaperGifRenderer` | AnimatedGIF decoder → 1-bit Bayer-8×8 dithered framebuffer |
 | `KeyManager` | Button debounce (50ms), long press, combo detection (A+C) |
 | `BuzzerManager` | Passive buzzer melodies (permission alert, error, complete) |
 | `BatteryManager` | ADC voltage reading, percentage calculation, USB detection |
-| `TimeManager` | NTP sync (multi-server fallback), timezone support |
+| `TimeManager` | NTP sync (multi-server fallback), timezone support, BLE epoch sync |
 | `ConfigManager` | NVS persistent settings (LED, buzzer, permission, DND, timezone) |
 | `MemoryMonitor` | Heap tracking, fragmentation alerts |
 | `Logger` | Tagged serial logging (INFO/ERROR/WARNING/DEBUG) |
@@ -239,6 +249,63 @@ Add to your `~/.claude/settings.json` hooks section:
 
 Works with any AI tool that supports HTTP webhooks: Claude Code, Copilot, Cursor, Codex, Gemini CLI, OpenCode.
 
+## Claude Desktop Integration (v1.1.0+)
+
+InksPet implements Anthropic's [Hardware Buddy BLE protocol](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md) natively — pair it with the Claude desktop app over Bluetooth LE and it becomes a first-class approval panel and live session display, no HTTP hooks needed.
+
+### Pairing
+
+1. Claude desktop app → **Help → Troubleshooting → Enable Developer Mode**
+2. **Developer → Open Hardware Buddy…** → **Connect** → pick `Claude-XXXX` from the list
+   (the suffix is the last 2 bytes of your device's Bluetooth MAC)
+3. InksPet shows a 6-digit passkey on the e-paper → type it into macOS when prompted
+4. The bond persists across reboots; subsequent sessions reconnect automatically
+
+### Supported capabilities
+
+| Direction | Capability |
+|-----------|------------|
+| Desktop → Device | Heartbeat snapshot (total / running / waiting / msg / tokens / tokens_today / entries) |
+| Desktop → Device | Permission prompts (`id` / `tool` / `hint`) |
+| Desktop → Device | Turn events (SDK content array, text + tool calls) |
+| Desktop → Device | Time sync (epoch + timezone offset) |
+| Desktop → Device | Owner name, pet name |
+| Desktop → Device | Folder push — drag a GIF character pack onto the Hardware Buddy window, streamed over BLE, written to LittleFS, hot-swapped into the renderer |
+| Device → Desktop | Permission decision `{cmd:permission, decision:once \| deny}` — physical button A approves, C denies |
+| Device → Desktop | Status ack (battery / heap / uptime / approvals / denials / velocity / level / bonded-flag) |
+| Device → Desktop | `unpair` — erases the stored LE bond when Claude's "Forget" is pressed |
+
+### Buddy HUD on the e-paper
+
+```
+┌──────────────────────────────────────────┐
+│ ■■■■■ │ approve: Bash                    │  ← upstream msg (Chinese also supported)
+│ [pix  │ Today: 31.2K                     │  ← tokens_today counter
+│  art] │ · · · · · · · · · · · · · · · ·  │
+│       │ · 10:42 git push                 │  ← recent transcript entries (≤3)
+│ Work  │ · 10:41 yarn test                │
+│       │ · 10:39 reading file...          │
+├──────────────────────────────────────────┤
+│ Claude-EA06                       bonded │  ← device name · link encryption
+└──────────────────────────────────────────┘
+```
+
+### GIF character packs
+
+Drag a folder containing `manifest.json` + per-state `.gif` files onto the Hardware Buddy window. The pack streams over BLE (base64 chunks with per-chunk acks, max ~1.8 MB), lands in `/characters/<name>/` on LittleFS, and the renderer switches to animated mode. Colour GIFs are dithered to 1-bit with an 8×8 Bayer matrix — monochrome panel, colour-original character.
+
+See the [`bufo` example](https://github.com/anthropics/claude-desktop-buddy/tree/main/characters/bufo) in the upstream repo.
+
+### Security
+
+- **LE Secure Connections + MITM bonding** — NUS read/write is encryption-gated
+- **DisplayOnly IO capability** — the 6-digit passkey is generated per-boot on the device side, typed on the macOS prompt (resists passive BLE sniffing)
+- **`{cmd:unpair}` handling** — Claude's "Forget" button wipes the bond on the device too
+
+### Works alongside HTTP webhooks
+
+BLE and HTTP coexist without conflict. Claude Code hooks (HTTP) and Claude Desktop (BLE) can both drive InksPet at the same time — the AgentStateManager merges sessions by priority. Permission requests carry a **Source tag** (BLE vs HTTP) so button decisions always reply on the correct transport, no cross-channel leakage.
+
 ## Build
 
 ### Quick Flash (Browser)
@@ -290,7 +357,7 @@ pio run -t buildfs       # Build LittleFS filesystem
 
 ## Status
 
-**v1.0.0 — Firmware functional.** Agent state display, permission approval, LED sync, tool statistics, Web dashboard with one-click hook setup all working. Next: enclosure design and small batch production.
+**v1.1.0 — Claude Desktop BLE integration live.** All v1.0.x features plus native Hardware Buddy protocol: BLE pairing over LE Secure Connections, live session HUD, physical-button tool approval replied back to Claude desktop, GIF character pack playback with 1-bit dithering, Chinese/UTF-8 rendering on the HUD. See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
