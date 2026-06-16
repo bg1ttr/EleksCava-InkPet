@@ -24,6 +24,7 @@ public:
     void handleAllow();
     void handleAlwaysAllow();
     void handleDeny();
+    bool respondToSession(const String& sessionId, const String& action);
 
     // Check for timeout
     void update();

@@ -581,6 +581,7 @@ const uint8_t* getPixelArtForState(const char* stateName) {
     if (strcmp(stateName, "thinking") == 0) return pixelart_thinking;
     if (strcmp(stateName, "working") == 0) return pixelart_working;
     if (strcmp(stateName, "error") == 0) return pixelart_error;
+    if (strcmp(stateName, "ask") == 0) return pixelart_permission;
     if (strcmp(stateName, "completed") == 0) return pixelart_completed;
     if (strcmp(stateName, "permission") == 0) return pixelart_permission;
     if (strcmp(stateName, "juggling") == 0) return pixelart_juggling;

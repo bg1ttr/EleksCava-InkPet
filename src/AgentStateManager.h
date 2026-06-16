@@ -16,18 +16,35 @@ enum class AgentState : uint8_t {
     THINKING,
     WORKING,
     ERROR,
+    ASK,
     PERMISSION
 };
 
 struct AgentSession {
+    static constexpr uint8_t MAX_TASK_ITEMS = 3;
+
     String agentName;
     String sessionId;
     AgentState state;
     String tool;
     String file;
+    String taskTitle;
+    String taskSummary;
+    String promptSnippet;
+    String repo;
+    String branch;
+    String currentAction;
+    String language;
+    String usageLine1;
+    String usageLine2;
+    String errorMessage;
+    String recentCompletionTitle;
+    String recentCompletionAgo;
+    String permissionCommand;
     unsigned long lastUpdate;
     unsigned long sessionStart;   // When this session first appeared
     bool active;
+    int16_t priority;
     // Tool call statistics
     uint16_t toolCalls;           // Total tool invocations
     uint16_t reads;
@@ -39,6 +56,14 @@ struct AgentSession {
     uint16_t tasksRunning;
     uint16_t tasksPending;
     bool hasTasks;                // Whether any TodoWrite data has been received
+    String taskItems[MAX_TASK_ITEMS];
+    uint8_t taskItemCount;
+    bool hasReliableProgress;
+    uint16_t progressDone;
+    uint16_t progressTotal;
+    bool hasUsage;
+    String questionOptions[MAX_TASK_ITEMS];
+    uint8_t questionOptionCount;
 };
 
 class AgentStateManager {
@@ -49,7 +74,8 @@ public:
     void processEvent(const JsonObject& event);
 
     // Update task progress from TodoWrite hook
-    void updateTasks(const String& sessionId, uint16_t done, uint16_t running, uint16_t pending);
+    void updateTasks(const String& sessionId, uint16_t done, uint16_t running, uint16_t pending,
+                     const String* items = nullptr, uint8_t itemCount = 0);
 
     // Get current highest-priority state
     AgentState getCurrentState() const;
@@ -67,6 +93,7 @@ public:
     // State info
     static const char* stateToString(AgentState state);
     static const char* stateToDisplayName(AgentState state);
+    static AgentState stateFromString(const String& state, AgentState fallback);
 
     // Callback
     using StateChangeCallback = std::function<void(AgentState newState, const AgentSession* session)>;
@@ -84,4 +111,5 @@ private:
     AgentSession* findOrCreateSession(const String& agent, const String& session);
     AgentState mapEventToState(const String& event, int activeSessions);
     void notifyStateChange();
+    void resetSessionFields(AgentSession* session, const String& agent, const String& sessionId);
 };

@@ -23,12 +23,12 @@ InksPet 是固件，[EleksCava](https://elekscava.com) 是硬件。两者结合�
 ## 功能特性
 
 - **Claude 桌面 App 蓝牙 (v1.1.0+)** -- 原生支持 Anthropic 官方 [Hardware Buddy](https://github.com/anthropics/claude-desktop-buddy) 协议。通过 LE Secure Connections 配对，接收实时会话快照，物理按键审批工具请求，接收 GIF 字符包 -- 详见下方 [Claude 桌面 App 集成](#claude-桌面-app-集成-v110)
-- **12 种智能体状态** -- 像素风 Clawd 螃蟹，每种状态独特姿态
-- **RGB LED 状态灯** -- 蓝色=思考中，绿色=工作中，红色=错误，黄色=待授权
+- **13 种智能体状态** -- 像素风 Clawd 螃蟹，针对小尺寸墨水屏压缩显示
+- **RGB LED 状态灯** -- 蓝色=思考中，绿色追踪/进度=工作中，红色=错误，黄色=待授权/等待输入
 - **物理授权按键** -- 按 A/B/C 批准/拒绝，无需切换窗口
 - **中文 / UTF-8 文本** -- HUD 与权限屏可显示中文工具名、文件路径、Claude 会话摘要 (wqy12 字体, ~3000 字形)
 - **工具调用统计** -- 实时 Read/Write/Edit/Bash 计数 + 已用时间 + 文件路径
-- **一键 Hook 配置** -- Web 面板提供复制粘贴提示词，AI 自行完成配置
+- **一键 Hook 配置** -- Web 面板提供安装脚本和本地 bridge，适配 Codex / Claude / Cursor 类工具
 - **免打扰模式** -- 长按 B 键静音 LED + 蜂鸣器，自动拒绝权限请求
 - **强制门户** -- AP 模式下手机自动弹出 WiFi 配置页面
 - **Web 控制面板** -- 实时状态、设备配置、Hook 配置，访问 `http://inkspet.local`
@@ -48,7 +48,7 @@ InksPet 是固件，[EleksCava](https://elekscava.com) 是硬件。两者结合�
 - **电池**: 3.7V 锂聚合物电池, USB-C 充电
 - **供电**: USB-C
 
-## 12 种智能体状态
+## 13 种智能体状态
 
 经验法则: **蓝色 = 思考中, 绿色 = 工作中, 红色 = 出错了, 黄色 = 需操作**
 
@@ -57,9 +57,10 @@ InksPet 是固件，[EleksCava](https://elekscava.com) 是硬件。两者结合�
 | 睡眠中 | 蜷缩, zzz | 关闭 | -- | 空闲超过 60 秒 |
 | 空闲 | 放松姿态 | 白色(暗) | 常亮 | 无活动 |
 | 思考中 | 思考气泡 | 蓝色 | 呼吸 | `UserPromptSubmit` |
-| 工作中 | 键盘姿态 | 绿色 | 常亮 | `PreToolUse` / `PostToolUse` |
+| 工作中 | 键盘姿态 | 绿色 | 追踪 / 进度 | `PreToolUse` / `PostToolUse` |
 | 已完成 | 庆祝 | 绿色 | 渐灭一次 | `Stop` / `PostCompact` |
 | 出错 | 震惊脸, ! | 红色 | 快闪 | `PostToolUseFailure` |
+| 等待输入 | 问号 | 黄色 | 呼吸 | `Ask` / `Question` / `UserInputRequest` |
 | 待授权 | 问号 | 黄色 | 闪烁 | `PermissionRequest` |
 | 分身中 | 抛球 | 紫色 | 呼吸 | `SubagentStart` (1-2 个会话) |
 | 指挥中 | 举指挥棒 | 紫色 | 常亮 | `SubagentStart` (3+ 个会话) |
@@ -109,11 +110,12 @@ AI 编码智能体 (HTTP)                    EleksCava 硬件                   
 |--------|-------------|
 | `DisplayManager` | 墨水屏驱动 (GxEPD2), 侧边栏布局, Buddy HUD, CJK 字体自动切换, 防残影 |
 | `RGBLed` | WS2812 LED 灯效 (常亮, 呼吸, 闪烁, 彩虹, 渐灭) |
-| `AgentStateManager` | 状态机, 12 种状态, 优先级解析, 多会话追踪 |
+| `AgentStateManager` | 状态机, 13 种状态, 优先级解析, 多会话追踪 |
 | `PermissionManager` | 权限请求队列 (最多 4 个), 来源标签 (BLE/HTTP), 超时自动拒绝 |
 | `PixelArt` | 11 个 Clawd 螃蟹 XBM 位图 (48x48, 1-bit) |
 | `WiFiManager` | WiFi STA 连接, AP 模式, 凭据存储 (NVS) |
 | `InksPetWebServer` | AsyncWebServer, REST API, WebSocket, LittleFS 静态文件 |
+| `AgentHudConfig` | AI HUD 显示、隐私和 LED 进度设置，持久化到 NVS |
 | `buddy/BleBridge` | NimBLE Nordic UART Service, LE Secure Connections, passkey 配对 |
 | `buddy/BuddyProtocol` | Hardware Buddy JSON 行解析, snapshot / turn / cmd / status ack |
 | `buddy/BuddyStateMapper` | 官方 7 态 BLE 语义映射到 InksPet 12 态枚举 |
@@ -155,6 +157,7 @@ Content-Type: application/json
 | `PreToolUse` | working |
 | `PostToolUse` | working |
 | `PostToolUseFailure` | error |
+| `Ask` / `Question` / `UserInputRequest` | ask |
 | `SubagentStart` (1-2 个会话) | juggling |
 | `SubagentStart` (3+ 个会话) | conducting |
 | `Stop` / `PostCompact` | completed |
@@ -191,6 +194,17 @@ GET /api/agent/status
   "session": "abc123",
   "tool": "Edit",
   "file": "src/main.cpp",
+  "task": {
+    "title": "Fix settings UI",
+    "repo": "EleksCava-InkPet",
+    "branch": "main",
+    "action": "Edit src/main.cpp"
+  },
+  "progress": {
+    "reliable": true,
+    "done": 2,
+    "total": 5
+  },
   "uptime": 3600,
   "active_sessions": 2
 }
@@ -208,13 +222,31 @@ GET /api/device/info
 GET /api/config
 POST /api/config
 POST /api/config/reset
+GET /api/agent/config
+POST /api/agent/config
+POST /api/agent/config/test
 ```
+
+### 本地 Bridge
+
+```
+GET /api/agent/bridge.js
+GET /api/agent/install.sh?agent=codex
+```
+
+Bridge 会把更丰富的 AI 工具事件规范化成 InksPet 的紧凑 HUD 数据：标题、仓库、分支、当前动作、用量窗口、最近完成项、权限命令和 Todo 进度。
 
 ## Hook 配置
 
 ### 简单方式
 
-打开 InksPet Web 控制面板 `http://inkspet.local` (或设备 IP), 点击 **Hook Setup**, 复制提示词, 粘贴给你的 AI 编程助手。它会自行完成配置。10 秒搞定。
+打开 InksPet Web 控制面板 `http://inkspet.local` (或设备 IP), 点击 **Hook Setup**, 然后运行安装命令:
+
+```sh
+curl -fsSL 'http://inkspet.local/api/agent/install.sh?agent=codex' | sh
+```
+
+安装脚本会把 bridge 下载到 `~/.inkspet-agent-hud`，保留已有 Codex hooks，编辑前写入备份，并向设备发送一次测试事件。复制 Prompt 和手动 JSON 标签页仍保留作为 fallback。
 
 ### 手动配置 (Claude Code)
 

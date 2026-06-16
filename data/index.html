@@ -253,13 +253,31 @@
 
       <!-- Tab buttons -->
       <div style="display:flex;border-bottom:1px solid var(--border);overflow-x:auto" id="hook-tabs">
-        <button class="hook-tab active" onclick="showHookTab('claude')">Claude Code</button>
+        <button class="hook-tab active" onclick="showHookTab('install')">Install</button>
+        <button class="hook-tab" onclick="showHookTab('claude')">Claude Code</button>
         <button class="hook-tab" onclick="showHookTab('prompt')">Any AI Agent</button>
         <button class="hook-tab" onclick="showHookTab('manual')">Manual (JSON)</button>
       </div>
 
+      <!-- Tab: Install -->
+      <div class="hook-pane" id="pane-install">
+        <div style="padding:16px 20px">
+          <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5" id="install-desc">
+            Run this on your Mac to install the InksPet bridge. Existing hooks are preserved.
+          </p>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <div style="display:flex;justify-content:flex-end;padding:6px 8px;border-bottom:1px solid var(--border);background:var(--bg-card)">
+              <button onclick="copyBlock('install-command')" style="background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-mono)">COPY</button>
+            </div>
+            <pre id="install-command" style="padding:14px;font-size:12px;font-family:var(--font-mono);color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;margin:0"></pre>
+          </div>
+          <button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="runHudTest()" id="hud-test-btn">Send Test Event</button>
+          <span id="hud-test-result" style="font-size:12px;color:var(--text-dim);margin-left:8px"></span>
+        </div>
+      </div>
+
       <!-- Tab: Claude Code -->
-      <div class="hook-pane" id="pane-claude">
+      <div class="hook-pane" id="pane-claude" style="display:none">
         <div style="padding:16px 20px">
           <p style="font-size:13px;color:var(--text-dim);margin:0 0 12px;line-height:1.5" id="claude-desc">
             Copy this prompt and paste it into Claude Code (or any AI coding assistant). It will configure the hooks automatically.
@@ -554,6 +572,8 @@ const PIXEL_ART = {
   </svg>`,
 };
 
+PIXEL_ART.ask = PIXEL_ART.permission;
+
 // LED color per state (matches firmware RGBLed behavior)
 const LED_COLORS = {
   idle:       { color: '#ffffff', opacity: 0.3, pulse: false },
@@ -566,6 +586,7 @@ const LED_COLORS = {
   error:      { color: '#f85149', opacity: 1.0,  pulse: true },
   attention:  { color: '#e3b341', opacity: 1.0,  pulse: false },
   permission: { color: '#e3b341', opacity: 1.0,  pulse: true },
+  ask:        { color: '#e3b341', opacity: 0.9,  pulse: true },
   sweeping:   { color: '#58a6ff', opacity: 0.8,  pulse: true },
   carrying:   { color: '#f8954a', opacity: 0.9,  pulse: true },
 };
@@ -586,6 +607,7 @@ const PAGE_LABELS = {
     desc_hook: 'Connect your AI agent',
     modal_title: 'Connect Your AI Agent',
     modal_subtitle: 'Copy the prompt below and paste it to your AI coding assistant',
+    install_desc: 'Run this on your Mac to install the InksPet bridge. Existing hooks are preserved.',
     claude_desc: 'Copy this prompt and paste it into Claude Code (or any AI coding assistant). It will configure the hooks automatically.',
   },
   zh: {
@@ -602,6 +624,7 @@ const PAGE_LABELS = {
     desc_hook: '连接你的 AI 编程助手',
     modal_title: '连接你的 AI 助手',
     modal_subtitle: '复制下面的内容，粘贴给你的 AI 编程助手，让它自己完成配置',
+    install_desc: '在 Mac 上运行这条命令安装 InksPet bridge；已有 hooks 会被保留。',
     claude_desc: '复制以下 Prompt，粘贴到 Claude Code（或任何 AI 编程助手）中，它会自动完成 Hook 配置。',
   }
 };
@@ -625,6 +648,7 @@ function applyPageLabels() {
   setText('desc-hook-setup', L.desc_hook || 'Connect your AI agent');
   setText('modal-title', L.modal_title || 'Connect Your AI Agent');
   setText('modal-subtitle', L.modal_subtitle || 'Copy the prompt below and paste it to your AI coding assistant');
+  setText('install-desc', L.install_desc || '');
   setText('claude-desc', L.claude_desc || '');
 }
 
@@ -639,6 +663,12 @@ let deviceState = {
   agent: null,
   tool: null,
   file: null,
+  taskTitle: null,
+  taskAction: null,
+  repo: null,
+  branch: null,
+  progressDone: 0,
+  progressTotal: 0,
   sessions: 0,
 };
 
@@ -677,9 +707,14 @@ function renderState() {
     agentEl.textContent = t('no_agent');
   }
 
-  // Tool / file info
-  const toolInfo = [deviceState.tool, deviceState.file].filter(Boolean).join(' → ');
-  toolEl.textContent = toolInfo || '';
+  // Tool / task info
+  const title = deviceState.taskTitle || deviceState.taskAction;
+  const repo = [deviceState.repo, deviceState.branch].filter(Boolean).join(':');
+  const toolInfo = title || [deviceState.tool, deviceState.file].filter(Boolean).join(' → ');
+  const progress = deviceState.progressTotal > 0
+    ? ` ${deviceState.progressDone}/${deviceState.progressTotal}`
+    : '';
+  toolEl.textContent = [toolInfo, repo].filter(Boolean).join(' · ') + progress;
 
   // LED ring preview
   const led = LED_COLORS[s] || LED_COLORS.idle;
@@ -761,6 +796,14 @@ async function fetchAgentStatus() {
     deviceState.agent    = r.data.agent || null;
     deviceState.tool     = r.data.tool || null;
     deviceState.file     = r.data.file || null;
+    const task = r.data.task || {};
+    const progress = r.data.progress || {};
+    deviceState.taskTitle = task.title || null;
+    deviceState.taskAction = task.action || null;
+    deviceState.repo = task.repo || null;
+    deviceState.branch = task.branch || null;
+    deviceState.progressDone = progress.done || 0;
+    deviceState.progressTotal = progress.total || 0;
     deviceState.sessions = r.data.active_sessions || 0;
     renderState();
   }
@@ -803,6 +846,15 @@ WS.on('stateUpdate', function(msg) {
   deviceState.state    = msg.state || 'idle';
   deviceState.agent    = msg.agent || null;
   deviceState.tool     = msg.tool || null;
+  deviceState.file     = msg.file || null;
+  const task = msg.task || {};
+  const progress = msg.progress || {};
+  deviceState.taskTitle = task.title || null;
+  deviceState.taskAction = task.action || null;
+  deviceState.repo = task.repo || null;
+  deviceState.branch = task.branch || null;
+  deviceState.progressDone = progress.done || 0;
+  deviceState.progressTotal = progress.total || 0;
   deviceState.sessions = msg.active_sessions || 0;
   renderState();
 });
@@ -820,6 +872,10 @@ function openHookSetup() {
   const url = getDeviceURL();
   const ep = url + '/api/agent/state';
   const tasksEp = url + '/api/agent/tasks';
+  const installUrl = url + '/api/agent/install.sh?agent=codex';
+
+  document.getElementById('install-command').textContent =
+`curl -fsSL '${installUrl}' | sh`;
 
   // Claude Code prompt (user pastes this into Claude Code CLI)
   document.getElementById('claude-prompt').textContent =
@@ -938,6 +994,7 @@ Please configure this now using whatever hook/webhook mechanism your tool suppor
   document.getElementById('api-status').textContent = url + '/api/agent/status';
 
   document.getElementById('hook-modal').style.display = 'block';
+  showHookTab('install');
 }
 
 function closeHookSetup() {
@@ -947,8 +1004,34 @@ function closeHookSetup() {
 function showHookTab(tab) {
   document.querySelectorAll('.hook-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.hook-pane').forEach(p => p.style.display = 'none');
-  event.target.classList.add('active');
+  const tabButtons = Array.from(document.querySelectorAll('.hook-tab'));
+  const button = tabButtons.find(btn => btn.getAttribute('onclick') && btn.getAttribute('onclick').includes("'" + tab + "'"));
+  if (button) button.classList.add('active');
   document.getElementById('pane-' + tab).style.display = 'block';
+}
+
+async function runHudTest() {
+  const btn = document.getElementById('hud-test-btn');
+  const result = document.getElementById('hud-test-result');
+  if (btn) btn.disabled = true;
+  if (result) result.textContent = 'sending...';
+  const r = await postJSON('/api/agent/state', {
+    agent: 'web-test',
+    session: 'inkspet-web-test',
+    event: 'UserPromptSubmit',
+    state: 'thinking',
+    title: 'InksPet HUD test',
+    task: {
+      title: 'InksPet HUD test',
+      repo: 'EleksCava-InkPet',
+      action: 'Verify bridge endpoint'
+    },
+    progress: { reliable: true, done: 1, total: 3 },
+    display: { language: currentLang === 'zh' ? 'zh-CN' : 'en-US' }
+  });
+  if (result) result.textContent = r.ok ? 'sent' : 'failed';
+  if (btn) btn.disabled = false;
+  fetchAgentStatus();
 }
 
 function copyBlock(id) {

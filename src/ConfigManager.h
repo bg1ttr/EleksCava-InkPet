@@ -12,13 +12,13 @@ public:
 
     // LED
     String getLedBrightness() const { return _ledBrightness; }
-    void setLedBrightness(const String& val) { _ledBrightness = val; }
+    void setLedBrightness(const String& val) { _ledBrightness = normalizeLedBrightness(val); }
 
     // Buzzer
     bool getBuzzerEnabled() const { return _buzzerEnabled; }
     void setBuzzerEnabled(bool val) { _buzzerEnabled = val; }
     String getBuzzerVolume() const { return _buzzerVolume; }
-    void setBuzzerVolume(const String& val) { _buzzerVolume = val; }
+    void setBuzzerVolume(const String& val) { _buzzerVolume = normalizeBuzzerVolume(val); }
 
     // Permission
     int getPermissionTimeout() const { return _permissionTimeout; }
@@ -59,4 +59,7 @@ private:
     int _timezone;
     String _ntpServer;
     String _mdnsHostname;
+
+    static String normalizeLedBrightness(const String& val);
+    static String normalizeBuzzerVolume(const String& val);
 };

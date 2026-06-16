@@ -237,10 +237,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
       </div>
       <div class="config-row-control">
         <select class="form-input form-select" id="cfg-led-brightness" onchange="markUnsaved('led-unsaved')">
-          <option value="0" id="opt-off">Off</option>
-          <option value="1" id="opt-low">Low</option>
-          <option value="2" id="opt-medium">Medium</option>
-          <option value="3" id="opt-high">High</option>
+          <option value="off" id="opt-off">Off</option>
+          <option value="low" id="opt-low">Low</option>
+          <option value="medium" id="opt-medium">Medium</option>
+          <option value="high" id="opt-high">High</option>
         </select>
       </div>
     </div>
@@ -282,9 +282,9 @@ input[type="range"]::-webkit-slider-thumb:hover {
       </div>
       <div class="config-row-control">
         <select class="form-input form-select" id="cfg-buzzer-volume" onchange="markUnsaved('sound-unsaved')">
-          <option value="1" id="opt-vol-low">Low</option>
-          <option value="2" id="opt-vol-med">Medium</option>
-          <option value="3" id="opt-vol-high">High</option>
+          <option value="low" id="opt-vol-low">Low</option>
+          <option value="medium" id="opt-vol-med">Medium</option>
+          <option value="high" id="opt-vol-high">High</option>
         </select>
       </div>
     </div>
@@ -383,6 +383,76 @@ input[type="range"]::-webkit-slider-thumb:hover {
     <div class="section-save-row">
       <button class="btn btn-primary btn-sm save-btn" id="save-disp-btn" onclick="saveSection('display')">
         <span id="save-disp-label">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== AI HUD SETTINGS ========== -->
+  <div class="card config-section" id="section-agent">
+    <div class="card-header">
+      <span class="card-title">
+        <span class="dot" style="background:var(--accent)"></span>
+        <span id="lbl-agent-title">AI HUD Settings</span>
+        <span class="unsaved-dot" id="agent-unsaved"></span>
+      </span>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-agent-enabled">AI HUD</div>
+        <div class="config-row-desc" id="desc-agent-enabled">Accept tool events and show agent state</div>
+      </div>
+      <div class="config-row-control">
+        <label class="toggle">
+          <input type="checkbox" id="cfg-agent-enabled" onchange="markUnsaved('agent-unsaved')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-agent-privacy">Hide Prompt Text</div>
+        <div class="config-row-desc" id="desc-agent-privacy">Prefer task summaries over raw prompt snippets</div>
+      </div>
+      <div class="config-row-control">
+        <label class="toggle">
+          <input type="checkbox" id="cfg-agent-privacy" onchange="markUnsaved('agent-unsaved')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-agent-led-progress">LED Progress</div>
+        <div class="config-row-desc" id="desc-agent-led-progress">Use the 5 RGB LEDs as task progress dots</div>
+      </div>
+      <div class="config-row-control">
+        <label class="toggle">
+          <input type="checkbox" id="cfg-agent-led-progress" onchange="markUnsaved('agent-unsaved')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-row-label">
+        <div class="config-row-title" id="lbl-agent-max-tasks">Task Lines</div>
+        <div class="config-row-desc" id="desc-agent-max-tasks">Maximum task hints kept for compact display</div>
+      </div>
+      <div class="config-row-control">
+        <select class="form-input form-select" id="cfg-agent-max-tasks" onchange="markUnsaved('agent-unsaved')">
+          <option value="1" id="opt-agent-task-1">1</option>
+          <option value="2" id="opt-agent-task-2">2</option>
+          <option value="3" id="opt-agent-task-3">3</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section-save-row">
+      <button class="btn btn-primary btn-sm save-btn" id="save-agent-btn" onclick="saveSection('agent')">
+        <span id="save-agent-label">Save</span>
       </button>
     </div>
   </div>
@@ -543,6 +613,16 @@ const PAGE_LABELS = {
     dnd_mode: 'DND Mode',
     desc_dnd: 'Disable buzzer and LED flashing',
     opt_s30: '30s', opt_s60: '60s', opt_s120: '120s', opt_s300: '5 min', opt_snever: 'Never',
+    // AI HUD
+    agent_title: 'AI HUD Settings',
+    agent_enabled: 'AI HUD',
+    desc_agent_enabled: 'Accept tool events and show agent state',
+    agent_privacy: 'Hide Prompt Text',
+    desc_agent_privacy: 'Prefer task summaries over raw prompt snippets',
+    agent_led_progress: 'LED Progress',
+    desc_agent_led_progress: 'Use the 5 RGB LEDs as task progress dots',
+    agent_max_tasks: 'Task Lines',
+    desc_agent_max_tasks: 'Maximum task hints kept for compact display',
     // Network
     net_title: 'Network Settings',
     timezone: 'Timezone',
@@ -597,6 +677,15 @@ const PAGE_LABELS = {
     dnd_mode: '勿扰模式',
     desc_dnd: '禁用蜂鸣器和 LED 闪烁',
     opt_s30: '30秒', opt_s60: '60秒', opt_s120: '120秒', opt_s300: '5分钟', opt_snever: '永不',
+    agent_title: 'AI HUD 设置',
+    agent_enabled: 'AI HUD',
+    desc_agent_enabled: '接收工具事件并显示 Agent 状态',
+    agent_privacy: '隐藏 Prompt 原文',
+    desc_agent_privacy: '优先显示任务摘要，避免直接展示原始 Prompt',
+    agent_led_progress: 'LED 进度',
+    desc_agent_led_progress: '用 5 颗 RGB 灯显示任务进度',
+    agent_max_tasks: '任务行数',
+    desc_agent_max_tasks: '紧凑显示中保留的任务提示数量',
     net_title: '网络设置',
     timezone: '时区',
     desc_tz: 'UTC 偏移 (-12 到 +12)',
@@ -671,6 +760,17 @@ function applyLabels() {
   setText('opt-s300', L('opt_s300'));
   setText('opt-snever', L('opt_snever'));
   setText('save-disp-label', L('save'));
+  // AI HUD
+  setText('lbl-agent-title', L('agent_title'));
+  setText('lbl-agent-enabled', L('agent_enabled'));
+  setText('desc-agent-enabled', L('desc_agent_enabled'));
+  setText('lbl-agent-privacy', L('agent_privacy'));
+  setText('desc-agent-privacy', L('desc_agent_privacy'));
+  setText('lbl-agent-led-progress', L('agent_led_progress'));
+  setText('desc-agent-led-progress', L('desc_agent_led_progress'));
+  setText('lbl-agent-max-tasks', L('agent_max_tasks'));
+  setText('desc-agent-max-tasks', L('desc_agent_max_tasks'));
+  setText('save-agent-label', L('save'));
   // Network
   setText('lbl-net-title', L('net_title'));
   setText('lbl-timezone', L('timezone'));
@@ -701,6 +801,7 @@ function setText(id, txt) {
 
 // --- Config state ---
 let cfg = {};
+let agentCfg = {};
 
 async function loadConfig() {
   animateLoadBar();
@@ -708,6 +809,12 @@ async function loadConfig() {
   if (r.ok && r.data) {
     cfg = r.data;
     applyConfigToForm();
+  }
+
+  const ra = await fetchJSON('/api/agent/config');
+  if (ra.ok && ra.data) {
+    agentCfg = ra.data;
+    applyAgentConfigToForm();
   }
 
   // Also load device info for system section
@@ -737,14 +844,16 @@ function animateLoadBar() {
 }
 
 function applyConfigToForm() {
-  // LED brightness (0-3)
+  // LED brightness
   const bright = document.getElementById('cfg-led-brightness');
-  bright.value = cfg.led_brightness !== undefined ? String(cfg.led_brightness) : '2';
+  const brightnessMap = { 0: 'off', 1: 'low', 2: 'medium', 3: 'high' };
+  bright.value = brightnessMap[cfg.led_brightness] || cfg.led_brightness || 'medium';
 
   // Sound
   document.getElementById('cfg-buzzer-enabled').checked = !!cfg.buzzer_enabled;
   const vol = document.getElementById('cfg-buzzer-volume');
-  vol.value = cfg.buzzer_volume !== undefined ? String(cfg.buzzer_volume) : '2';
+  const volumeMap = { 1: 'low', 2: 'medium', 3: 'high' };
+  vol.value = volumeMap[cfg.buzzer_volume] || cfg.buzzer_volume || 'low';
 
   // Permission
   const ptimeout = document.getElementById('cfg-permission-timeout');
@@ -764,6 +873,14 @@ function applyConfigToForm() {
   const hostname = cfg.mdns_hostname || 'inkspet';
   document.getElementById('cfg-mdns-hostname').value = hostname;
   updateMdnsPreview(hostname);
+}
+
+function applyAgentConfigToForm() {
+  document.getElementById('cfg-agent-enabled').checked = agentCfg.enabled !== false;
+  document.getElementById('cfg-agent-privacy').checked = !!(agentCfg.privacy && agentCfg.privacy.hidePrompt);
+  document.getElementById('cfg-agent-led-progress').checked = !(agentCfg.led && agentCfg.led.progress === false);
+  const max = agentCfg.multiTask && agentCfg.multiTask.maxVisible ? agentCfg.multiTask.maxVisible : 2;
+  document.getElementById('cfg-agent-max-tasks').value = String(max);
 }
 
 function markUnsaved(dotId) {
@@ -791,9 +908,9 @@ const SECTION_FIELDS = {
 
 function readFormValues() {
   return {
-    led_brightness:    parseInt(document.getElementById('cfg-led-brightness').value, 10),
+    led_brightness:    document.getElementById('cfg-led-brightness').value,
     buzzer_enabled:    document.getElementById('cfg-buzzer-enabled').checked,
-    buzzer_volume:     parseInt(document.getElementById('cfg-buzzer-volume').value, 10),
+    buzzer_volume:     document.getElementById('cfg-buzzer-volume').value,
     permission_timeout: parseInt(document.getElementById('cfg-permission-timeout').value, 10),
     permission_default: document.getElementById('cfg-permission-default').value,
     dnd_mode:          document.getElementById('cfg-dnd-mode').checked,
@@ -804,7 +921,52 @@ function readFormValues() {
   };
 }
 
+function readAgentConfigValues() {
+  return {
+    enabled: document.getElementById('cfg-agent-enabled').checked,
+    display: {
+      taskTitle: true,
+      usage: true,
+      progress: true,
+      multiTask: true,
+      density: 'compact',
+      summaryMode: 'single'
+    },
+    privacy: {
+      hidePrompt: document.getElementById('cfg-agent-privacy').checked
+    },
+    led: {
+      progress: document.getElementById('cfg-agent-led-progress').checked
+    },
+    multiTask: {
+      maxVisible: parseInt(document.getElementById('cfg-agent-max-tasks').value, 10)
+    }
+  };
+}
+
 async function saveSection(section) {
+  if (section === 'agent') {
+    const btn = document.getElementById('save-agent-btn');
+    const label = document.getElementById('save-agent-label');
+    if (btn) { btn.disabled = true; btn.classList.add('saving'); }
+    if (label) label.textContent = L('saving');
+    const r = await postJSON('/api/agent/config', readAgentConfigValues());
+    if (r.ok) {
+      if (label) label.textContent = L('saved');
+      document.getElementById('agent-unsaved').classList.remove('visible');
+      showMessage(L('save_ok'), 'success');
+      setTimeout(() => {
+        if (label) label.textContent = L('save');
+        if (btn) { btn.disabled = false; btn.classList.remove('saving'); }
+      }, 2000);
+    } else {
+      showMessage(L('save_fail'), 'error');
+      if (label) label.textContent = L('save');
+      if (btn) { btn.disabled = false; btn.classList.remove('saving'); }
+    }
+    return;
+  }
+
   const fields = SECTION_FIELDS[section];
   if (!fields) return;
 

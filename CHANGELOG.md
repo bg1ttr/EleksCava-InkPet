@@ -2,6 +2,42 @@
 
 All notable changes to InksPet firmware will be documented here.
 
+## [1.2.0] - 2026-06-16
+
+### Added
+- **AI HUD v2 for compact e-paper display** — richer task title, repo, action,
+  usage, progress, recent completion, and multi-task summary rendering tuned for
+  the 296x128 monochrome panel.
+- **Codex bridge installer** — `/api/agent/install.sh?agent=codex` installs a
+  local Node bridge, updates Codex hooks without removing existing hooks, and
+  keeps exactly one InksPet hook per supported Codex event.
+- **Persistent Agent HUD settings** — new `/api/agent/config` API and Web config
+  controls for privacy, task title, usage, progress, max visible tasks, density,
+  and enabled agents.
+- **RGB progress feedback** — working sessions use a green chase effect, reliable
+  progress lights show completion across the LED strip, and permission/error
+  states retain high-contrast warning colors.
+
+### Changed
+- Agent state ingestion now accepts KBS-style payloads with task lists, usage
+  windows, progress, permission prompts, questions, recent completions, priority,
+  and explicit state overrides.
+- The device Web UI now exposes a zsh-safe Codex install command and live test
+  event controls.
+
+### Fixed
+- Increased Agent HTTP JSON capacity so bridge payloads are accepted reliably.
+- Made the bridge compatible with ESPAsyncWebServer's embedded HTTP response
+  formatting in modern Node runtimes.
+- Prevented `curl | sh` installer tests from reading the remaining shell script
+  as prompt text.
+- Fixed HTTP permission responses so queued requests are cleared correctly.
+- `permission_timeout <= 0` now means never time out, instead of timing out
+  immediately.
+- Normalized legacy numeric LED and buzzer settings to named levels.
+
+---
+
 ## [1.1.1] - 2026-04-18
 
 ### Fixed

@@ -26,6 +26,16 @@ public:
         const char* agentName;
         const char* tool;
         const char* file;
+        const char* taskTitle;
+        const char* taskSummary;
+        const char* repo;
+        const char* branch;
+        const char* currentAction;
+        const char* usageLine1;
+        const char* usageLine2;
+        const char* recentCompletionTitle;
+        const char* recentCompletionAgo;
+        const char* permissionCommand;
         const uint8_t* pixelArt;
         unsigned long elapsedMs;    // Session elapsed time
         uint16_t toolCalls;         // Total tool invocations
@@ -39,6 +49,10 @@ public:
         uint16_t tasksDone;
         uint16_t tasksRunning;
         uint16_t tasksPending;
+        bool hasReliableProgress;
+        uint16_t progressDone;
+        uint16_t progressTotal;
+        bool hasUsage;
     };
     void showAgentState(const AgentDisplayInfo& info);
 
@@ -95,9 +109,16 @@ private:
         char agentName[32];
         char tool[20];
         char file[32];
+        char taskTitle[48];
+        char currentAction[48];
+        char usageLine1[28];
+        char recentCompletionTitle[48];
         int  activeSessions;
         bool hasTasks;
         uint16_t tasksDone, tasksRunning, tasksPending;
+        bool hasReliableProgress;
+        uint16_t progressDone, progressTotal;
+        bool hasUsage;
     };
     ContentCache _lastContent;
     bool _contentCacheValid;

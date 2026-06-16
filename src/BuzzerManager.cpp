@@ -86,6 +86,13 @@ void BuzzerManager::playWelcome() {
     playMelody(m);
 }
 
+void BuzzerManager::setVolumeLevel(const String& level) {
+    if (level == "low") setVolume(32);
+    else if (level == "medium") setVolume(64);
+    else if (level == "high") setVolume(96);
+    else setVolume(32);
+}
+
 void BuzzerManager::stop() {
     ledcWriteTone(BUZZER_CHANNEL, 0);
     _playing = false;

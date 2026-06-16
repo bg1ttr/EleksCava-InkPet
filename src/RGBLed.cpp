@@ -13,6 +13,8 @@ RGBLed::RGBLed()
       _brightness(50),
       _lastUpdate(0),
       _animStep(0),
+      _progressDone(0),
+      _progressTotal(0),
       _initialized(false)
 {}
 
@@ -73,6 +75,14 @@ void RGBLed::startRainbow() {
 
 void RGBLed::stopAll() {
     off();
+}
+
+void RGBLed::setProgress(uint8_t done, uint8_t total, LedColor color) {
+    _currentEffect = LedEffect::PROGRESS;
+    _currentColor = color;
+    _progressDone = done;
+    _progressTotal = total;
+    applyProgress();
 }
 
 void RGBLed::update() {
@@ -160,6 +170,27 @@ void RGBLed::update() {
             break;
         }
 
+        case LedEffect::CHASE: {
+            if (now - _lastUpdate < 120) return;
+            _lastUpdate = now;
+            _animStep++;
+            for (int i = 0; i < RGB_LED_COUNT; i++) {
+                int distance = (i - (int)(_animStep % RGB_LED_COUNT) + RGB_LED_COUNT) % RGB_LED_COUNT;
+                float factor = distance == 0 ? 1.0f : (distance == 1 ? 0.35f : 0.08f);
+                _strip.setPixelColor(i, _strip.Color(
+                    (uint8_t)(_currentColor.r * factor),
+                    (uint8_t)(_currentColor.g * factor),
+                    (uint8_t)(_currentColor.b * factor)
+                ));
+            }
+            _strip.show();
+            break;
+        }
+
+        case LedEffect::PROGRESS:
+            // Static until setProgress() receives a new task count.
+            break;
+
         case LedEffect::RAINBOW: {
             if (now - _lastUpdate < 30) return;
             _lastUpdate = now;
@@ -179,6 +210,22 @@ void RGBLed::update() {
 void RGBLed::applyColor(uint8_t r, uint8_t g, uint8_t b) {
     for (int i = 0; i < RGB_LED_COUNT; i++) {
         _strip.setPixelColor(i, _strip.Color(r, g, b));
+    }
+    _strip.show();
+}
+
+void RGBLed::applyProgress() {
+    uint8_t total = _progressTotal == 0 ? 1 : _progressTotal;
+    uint8_t lit = (_progressDone * RGB_LED_COUNT + total - 1) / total;
+    if (_progressDone > 0 && lit == 0) lit = 1;
+    if (lit > RGB_LED_COUNT) lit = RGB_LED_COUNT;
+
+    for (int i = 0; i < RGB_LED_COUNT; i++) {
+        if (i < lit) {
+            _strip.setPixelColor(i, _strip.Color(_currentColor.r, _currentColor.g, _currentColor.b));
+        } else {
+            _strip.setPixelColor(i, _strip.Color(2, 2, 2));
+        }
     }
     _strip.show();
 }

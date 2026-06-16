@@ -26,6 +26,7 @@
 #include "TimeManager.h"
 #include "InksPetWebServer.h"
 #include "AgentStateManager.h"
+#include "AgentHudConfig.h"
 #include "PermissionManager.h"
 #include "PixelArt.h"
 #include "buddy/BleBridge.h"
@@ -75,6 +76,7 @@ static WiFiManager*       wifi         = nullptr;
 static TimeManager*       timeMgr      = nullptr;
 static InksPetWebServer*   webServer    = nullptr;
 static AgentStateManager* agentMgr     = nullptr;
+static AgentHudConfig*     agentHudCfg  = nullptr;
 static PermissionManager* permMgr      = nullptr;
 static MemoryMonitor*     memMonitor   = nullptr;
 static BleBridge*         ble          = nullptr;
@@ -99,6 +101,7 @@ static void handleKeyEventAPMode(KeyEvent event);
 static void updateDisplayForCurrentMode();
 static void refreshAgentStateDisplay();
 static void mapStateToLed(AgentState state);
+static void updateProgressLed(const AgentSession* session);
 static void enterAPMode();
 static bool initNVS();
 static bool initLittleFS();
@@ -172,6 +175,7 @@ void setup() {
     // Pre-load config early so buzzer gets correct enabled state
     config->loadConfig();
     buzzer->setEnabled(config->getBuzzerEnabled());
+    buzzer->setVolumeLevel(config->getBuzzerVolume());
     buzzer->playWelcome();
     LOG_INFO(TAG, "Buzzer initialized (enabled=%d)", buzzer->isEnabled());
 
@@ -348,9 +352,23 @@ static DisplayManager::AgentDisplayInfo buildAgentDisplayInfo(
     info.pixelArt   = getPixelArtForState(sn);
     info.activeSessions = agentMgr->getActiveSessionCount();
     if (session) {
+        const AgentHudConfigData& hudCfg = agentHudCfg
+                                         ? agentHudCfg->data()
+                                         : AgentHudConfig::getInstance()->data();
         info.agentName    = session->agentName.c_str();
         info.tool         = session->tool.c_str();
         info.file         = session->file.c_str();
+        info.taskTitle    = hudCfg.showTaskTitle ? session->taskTitle.c_str() : "";
+        info.taskSummary  = hudCfg.privacyHidePrompt ? session->taskSummary.c_str()
+                                                     : session->promptSnippet.c_str();
+        info.repo         = session->repo.c_str();
+        info.branch       = session->branch.c_str();
+        info.currentAction = session->currentAction.c_str();
+        info.usageLine1   = hudCfg.showUsage ? session->usageLine1.c_str() : "";
+        info.usageLine2   = hudCfg.showUsage ? session->usageLine2.c_str() : "";
+        info.recentCompletionTitle = session->recentCompletionTitle.c_str();
+        info.recentCompletionAgo = session->recentCompletionAgo.c_str();
+        info.permissionCommand = session->permissionCommand.c_str();
         info.elapsedMs    = millis() - session->sessionStart;
         info.toolCalls    = session->toolCalls;
         info.reads        = session->reads;
@@ -361,6 +379,10 @@ static DisplayManager::AgentDisplayInfo buildAgentDisplayInfo(
         info.tasksDone    = session->tasksDone;
         info.tasksRunning = session->tasksRunning;
         info.tasksPending = session->tasksPending;
+        info.hasReliableProgress = hudCfg.showProgress && session->hasReliableProgress;
+        info.progressDone = session->progressDone;
+        info.progressTotal = session->progressTotal;
+        info.hasUsage = hudCfg.showUsage && session->hasUsage;
     }
     return info;
 }
@@ -369,24 +391,35 @@ static DisplayManager::AgentDisplayInfo buildAgentDisplayInfo(
 // Agent state change callback
 // =============================================================================
 static void onAgentStateChange(AgentState state, const AgentSession* session) {
+    static bool hasPreviousState = false;
+    static AgentState previousState = AgentState::SLEEPING;
+    bool stateChanged = !hasPreviousState || state != previousState;
+    hasPreviousState = true;
+    previousState = state;
+
     LOG_INFO(TAG, "State change -> %s (agent=%s)",
              AgentStateManager::stateToString(state),
              session ? session->agentName.c_str() : "none");
 
-    // Update LED effect + color based on state
-    mapStateToLed(state);
+    if (stateChanged) {
+        mapStateToLed(state);
+    }
+    updateProgressLed(session);
 
     // Note prompt-arrival time for velocity stats (<5s = heart trigger).
-    if (state == AgentState::PERMISSION && promptArrivedMs == 0) {
-        promptArrivedMs = millis();
-    } else if (state != AgentState::PERMISSION) {
-        promptArrivedMs = 0;
+    if (stateChanged) {
+        if (state == AgentState::PERMISSION && promptArrivedMs == 0) {
+            promptArrivedMs = millis();
+        } else if (state != AgentState::PERMISSION) {
+            promptArrivedMs = 0;
+        }
     }
 
     // Play buzzer sounds for notable transitions
-    if (!config->getDndMode()) {
+    if (stateChanged && !config->getDndMode()) {
         switch (state) {
             case AgentState::PERMISSION:
+            case AgentState::ASK:
                 buzzer->playPermissionAlert();
                 break;
             case AgentState::ERROR:
@@ -408,6 +441,10 @@ static void onAgentStateChange(AgentState state, const AgentSession* session) {
         } else {
             return;
         }
+    }
+
+    if (webServer) {
+        webServer->broadcastState();
     }
 
     // Render the appropriate display
@@ -659,15 +696,37 @@ static void mapStateToLed(AgentState state) {
             led->setEffect(LedEffect::BREATHING, LedColors::BLUE);  // Blue = processing
             break;
         case AgentState::WORKING:
-            led->setEffect(LedEffect::SOLID, LedColors::GREEN);     // Green = productive
+            led->setEffect(LedEffect::CHASE, LedColors::GREEN);     // Green chase = active tool loop
             break;
         case AgentState::ERROR:
             led->setEffect(LedEffect::FAST_FLASH, LedColors::RED);  // Red flash = error
+            break;
+        case AgentState::ASK:
+            led->setEffect(LedEffect::BREATHING, LedColors::YELLOW); // Yellow breathing = input needed
             break;
         case AgentState::PERMISSION:
             led->setEffect(LedEffect::FLASH, LedColors::YELLOW);    // Yellow flash = action needed
             break;
     }
+}
+
+static void updateProgressLed(const AgentSession* session) {
+    if (!session || !agentHudCfg || !agentHudCfg->data().ledProgress) return;
+    if (agentMgr->getCurrentState() != AgentState::WORKING) return;
+
+    uint16_t done = session->progressDone;
+    uint16_t total = session->progressTotal;
+    if (total == 0 && session->hasTasks) {
+        done = session->tasksDone;
+        total = session->tasksDone + session->tasksRunning + session->tasksPending;
+    }
+    if (total == 0) return;
+    if (done > total) done = total;
+    if (total > 255) {
+        done = (uint32_t)done * 255 / total;
+        total = 255;
+    }
+    led->setProgress((uint8_t)done, (uint8_t)total, LedColors::GREEN);
 }
 
 // =============================================================================
@@ -868,7 +927,12 @@ static void initPostWiFi() {
         LOG_ERROR(TAG, "mDNS init failed");
     }
 
-    // ---- 16. Start web server ----
+    // ---- 16. AI HUD local config ----
+    agentHudCfg = AgentHudConfig::getInstance();
+    agentHudCfg->begin();
+    LOG_INFO(TAG, "Agent HUD config loaded");
+
+    // ---- 17. Start web server ----
     webServer = InksPetWebServer::getInstance();
     if (webServer->begin()) {
         LOG_INFO(TAG, "Web server started on port %d", WEBSERVER_PORT);
@@ -876,17 +940,17 @@ static void initPostWiFi() {
         LOG_ERROR(TAG, "Web server failed to start");
     }
 
-    // ---- 17. Setup AgentStateManager callback ----
+    // ---- 18. Setup AgentStateManager callback ----
     agentMgr = AgentStateManager::getInstance();
     agentMgr->onStateChange(onAgentStateChange);
     LOG_INFO(TAG, "Agent state manager configured");
 
-    // ---- 18. Setup PermissionManager response callback ----
+    // ---- 19. Setup PermissionManager response callback ----
     permMgr = PermissionManager::getInstance();
     permMgr->onResponse(onPermissionResponse);
     LOG_INFO(TAG, "Permission manager configured");
 
-    // ---- 18b. Claude desktop buddy (BLE) subsystem ----
+    // ---- 19b. Claude desktop buddy (BLE) subsystem ----
     buddyStats = BuddyStats::getInstance();
     buddyStats->begin();
 

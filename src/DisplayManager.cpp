@@ -7,6 +7,9 @@
 static const char* TAG = "Display";
 DisplayManager* DisplayManager::_instance = nullptr;
 
+static bool containsNonAscii(const char* s);
+static void u8g2FitTrim(U8G2_FOR_ADAFRUIT_GFX& u8g2, char* buf, int16_t maxW);
+
 DisplayManager::DisplayManager()
     : _display(nullptr), _mutex(nullptr), _initialized(false),
       _hibernated(false), _forceFullRefresh(false), _lastScreenType(0),
@@ -88,11 +91,20 @@ bool DisplayManager::_hasContentChanged(const AgentDisplayInfo& info) const {
         || strncmp(_lastContent.agentName,  info.agentName  ? info.agentName  : "", 31) != 0
         || strncmp(_lastContent.tool,       info.tool       ? info.tool       : "", 19) != 0
         || strncmp(_lastContent.file,       info.file       ? info.file       : "", 31) != 0
+        || strncmp(_lastContent.taskTitle,  info.taskTitle  ? info.taskTitle  : "", 47) != 0
+        || strncmp(_lastContent.currentAction, info.currentAction ? info.currentAction : "", 47) != 0
+        || strncmp(_lastContent.usageLine1, info.usageLine1 ? info.usageLine1 : "", 27) != 0
+        || strncmp(_lastContent.recentCompletionTitle,
+                   info.recentCompletionTitle ? info.recentCompletionTitle : "", 47) != 0
         || _lastContent.activeSessions != info.activeSessions
         || _lastContent.hasTasks       != info.hasTasks
         || _lastContent.tasksDone      != info.tasksDone
         || _lastContent.tasksRunning   != info.tasksRunning
-        || _lastContent.tasksPending   != info.tasksPending;
+        || _lastContent.tasksPending   != info.tasksPending
+        || _lastContent.hasReliableProgress != info.hasReliableProgress
+        || _lastContent.progressDone   != info.progressDone
+        || _lastContent.progressTotal  != info.progressTotal
+        || _lastContent.hasUsage       != info.hasUsage;
 }
 
 void DisplayManager::_updateContentCache(const AgentDisplayInfo& info) {
@@ -100,11 +112,21 @@ void DisplayManager::_updateContentCache(const AgentDisplayInfo& info) {
     strncpy(_lastContent.agentName, info.agentName ? info.agentName : "", 31); _lastContent.agentName[31] = '\0';
     strncpy(_lastContent.tool,      info.tool      ? info.tool      : "", 19); _lastContent.tool[19]      = '\0';
     strncpy(_lastContent.file,      info.file      ? info.file      : "", 31); _lastContent.file[31]      = '\0';
+    strncpy(_lastContent.taskTitle, info.taskTitle ? info.taskTitle : "", 47); _lastContent.taskTitle[47] = '\0';
+    strncpy(_lastContent.currentAction, info.currentAction ? info.currentAction : "", 47); _lastContent.currentAction[47] = '\0';
+    strncpy(_lastContent.usageLine1, info.usageLine1 ? info.usageLine1 : "", 27); _lastContent.usageLine1[27] = '\0';
+    strncpy(_lastContent.recentCompletionTitle,
+            info.recentCompletionTitle ? info.recentCompletionTitle : "", 47);
+    _lastContent.recentCompletionTitle[47] = '\0';
     _lastContent.activeSessions = info.activeSessions;
     _lastContent.hasTasks       = info.hasTasks;
     _lastContent.tasksDone      = info.tasksDone;
     _lastContent.tasksRunning   = info.tasksRunning;
     _lastContent.tasksPending   = info.tasksPending;
+    _lastContent.hasReliableProgress = info.hasReliableProgress;
+    _lastContent.progressDone   = info.progressDone;
+    _lastContent.progressTotal  = info.progressTotal;
+    _lastContent.hasUsage       = info.hasUsage;
     _contentCacheValid = true;
 }
 
@@ -340,81 +362,126 @@ void DisplayManager::showAgentState(const AgentDisplayInfo& info) {
 
             // === Right content area (68-292px) ===
             const int RX = 68;  // Right area start X
+            const int16_t MAX_W = DISP_WIDTH - RX - 4;
 
-            // Row 1: State name (large bold) + active sessions badge
-            drawTextAt(info.stateName, RX, 18, u8g2_font_helvB12_tr);
+            // Row 1: State name + active sessions badge. This stays short and
+            // stable; volatile details go below to reduce e-paper churn.
+            drawTextAt(info.stateName, RX, 17, u8g2_font_helvB12_tr);
             if (info.activeSessions > 1) {
                 char badge[8];
                 snprintf(badge, sizeof(badge), "x%d", info.activeSessions);
-                _u8g2.setFont(u8g2_font_helvR08_tr);
-                int16_t stateW = _u8g2.getUTF8Width(info.stateName);
-                // Switch font to measure badge with correct font
                 _u8g2.setFont(u8g2_font_helvB12_tr);
-                stateW = _u8g2.getUTF8Width(info.stateName);
-                drawTextAt(badge, RX + stateW + 6, 18, u8g2_font_helvR08_tr);
+                int16_t stateW = _u8g2.getUTF8Width(info.stateName);
+                drawTextAt(badge, RX + stateW + 6, 17, u8g2_font_helvR08_tr);
             }
 
-            // Row 2: Agent name with dot indicator
-            if (info.agentName && strlen(info.agentName) > 0) {
-                _display->fillRect(RX, 25, 3, 3, GxEPD_BLACK);
-                drawTextAt(info.agentName, RX + 6, 30, u8g2_font_helvR08_tr);
+            // Row 2: agent + repo context.
+            char context[80];
+            const char* agent = (info.agentName && info.agentName[0]) ? info.agentName : "agent";
+            if (info.repo && info.repo[0]) {
+                if (info.branch && info.branch[0]) {
+                    snprintf(context, sizeof(context), "%s  %s:%s", agent, info.repo, info.branch);
+                } else {
+                    snprintf(context, sizeof(context), "%s  %s", agent, info.repo);
+                }
+            } else {
+                snprintf(context, sizeof(context), "%s", agent);
             }
+            _u8g2.setFont(u8g2_font_helvR08_tr);
+            u8g2FitTrim(_u8g2, context, MAX_W);
+            _display->fillRect(RX, 25, 3, 3, GxEPD_BLACK);
+            drawTextAt(context, RX + 6, 30, u8g2_font_helvR08_tr);
 
-            // Dotted separator
             for (int i = RX; i < 292; i += 3) {
                 _display->drawPixel(i, 36, GxEPD_BLACK);
             }
 
-            // Row 3: Current tool + file (the main action line)
-            if (info.tool && strlen(info.tool) > 0) {
-                // Tool name in bold
-                drawTextAt(info.tool, RX, 50, u8g2_font_helvB10_tr);
-                // File path after tool
-                if (info.file && strlen(info.file) > 0) {
-                    _u8g2.setFont(u8g2_font_helvB10_tr);
-                    int16_t toolW = _u8g2.getUTF8Width(info.tool);
-                    String filePath(info.file);
-                    if (filePath.length() > 28) {
-                        filePath = "..." + filePath.substring(filePath.length() - 25);
-                    }
-                    drawTextAt(filePath.c_str(), RX + toolW + 5, 50, u8g2_font_helvR08_tr);
-                }
+            // Rows 3-4: task-aware summary. Prefer bridge title/action, then
+            // fall back to tool/file so old hooks keep working.
+            const char* primary = nullptr;
+            if (info.taskTitle && info.taskTitle[0]) primary = info.taskTitle;
+            else if (info.currentAction && info.currentAction[0]) primary = info.currentAction;
+            else if (info.recentCompletionTitle && info.recentCompletionTitle[0]) primary = info.recentCompletionTitle;
+            else if (info.tool && info.tool[0]) primary = info.tool;
+            else primary = "Waiting for agent";
+
+            char primaryBuf[96];
+            strncpy(primaryBuf, primary, sizeof(primaryBuf) - 1);
+            primaryBuf[sizeof(primaryBuf) - 1] = 0;
+            const uint8_t* primaryFont = containsNonAscii(primaryBuf)
+                                       ? u8g2_font_wqy12_t_chinese2
+                                       : u8g2_font_helvB10_tr;
+            _u8g2.setFont(primaryFont);
+            u8g2FitTrim(_u8g2, primaryBuf, MAX_W);
+            drawTextAt(primaryBuf, RX, 50, primaryFont);
+
+            const char* secondary = nullptr;
+            if (info.currentAction && info.currentAction[0] &&
+                (!info.taskTitle || strcmp(info.currentAction, info.taskTitle) != 0)) {
+                secondary = info.currentAction;
+            } else if (info.file && info.file[0]) {
+                secondary = info.file;
+            } else if (info.taskSummary && info.taskSummary[0]) {
+                secondary = info.taskSummary;
+            } else if (info.usageLine1 && info.usageLine1[0]) {
+                secondary = info.usageLine1;
+            }
+            if (secondary && secondary[0]) {
+                char secondaryBuf[96];
+                strncpy(secondaryBuf, secondary, sizeof(secondaryBuf) - 1);
+                secondaryBuf[sizeof(secondaryBuf) - 1] = 0;
+                const uint8_t* secondaryFont = containsNonAscii(secondaryBuf)
+                                             ? u8g2_font_wqy12_t_chinese2
+                                             : u8g2_font_helvR08_tr;
+                _u8g2.setFont(secondaryFont);
+                u8g2FitTrim(_u8g2, secondaryBuf, MAX_W);
+                drawTextAt(secondaryBuf, RX, 64, secondaryFont);
             }
 
-            // Row 4: Tool call statistics (R:5 W:3 E:2 B:1)
-            if (info.toolCalls > 0) {
+            // Row 5: progress is a real hardware-friendly signal; show a tiny
+            // fixed-width bar rather than more prose.
+            int total = info.progressTotal;
+            int done = info.progressDone;
+            if (total <= 0 && info.hasTasks) {
+                done = info.tasksDone;
+                total = info.tasksDone + info.tasksRunning + info.tasksPending;
+            }
+            if (total > 0) {
+                if (done < 0) done = 0;
+                if (done > total) done = total;
+                const int barX = RX;
+                const int barY = 72;
+                const int barW = 68;
+                const int barH = 8;
+                int fillW = (barW - 2) * done / total;
+                _display->drawRect(barX, barY, barW, barH, GxEPD_BLACK);
+                if (fillW > 0) _display->fillRect(barX + 1, barY + 1, fillW, barH - 2, GxEPD_BLACK);
+                char progress[28];
+                snprintf(progress, sizeof(progress), "%d/%d tasks", done, total);
+                drawTextAt(progress, barX + barW + 8, barY + 8, u8g2_font_helvR08_tr);
+            } else if (info.toolCalls > 0) {
                 char stats[48];
-                snprintf(stats, sizeof(stats), "R:%u W:%u E:%u B:%u  [%u calls]",
+                snprintf(stats, sizeof(stats), "R:%u W:%u E:%u B:%u  %u calls",
                          info.reads, info.writes, info.edits, info.bashes, info.toolCalls);
-                // Truncate if too wide for content area (max ~220px @ helvR08)
                 _u8g2.setFont(u8g2_font_helvR08_tr);
-                const int16_t MAX_W = DISP_WIDTH - RX - 4;
-                while (strlen(stats) > 8 && _u8g2.getUTF8Width(stats) > MAX_W) {
-                    stats[strlen(stats) - 1] = '\0';  // trim last char
-                }
-                drawTextAt(stats, RX, 66, u8g2_font_helvR08_tr);
+                u8g2FitTrim(_u8g2, stats, MAX_W);
+                drawTextAt(stats, RX, 80, u8g2_font_helvR08_tr);
             }
 
-            // Row 5: Task progress (from TodoWrite hook)
-            if (info.hasTasks) {
-                char tasks[48];
-                int total = info.tasksDone + info.tasksRunning + info.tasksPending;
-                if (info.tasksRunning > 0) {
-                    snprintf(tasks, sizeof(tasks), "Tasks: %u/%u done  %u active",
-                             info.tasksDone, total, info.tasksRunning);
-                } else if (info.tasksPending > 0) {
-                    snprintf(tasks, sizeof(tasks), "Tasks: %u/%u done  %u pending",
-                             info.tasksDone, total, info.tasksPending);
-                } else {
-                    snprintf(tasks, sizeof(tasks), "Tasks: %u/%u done", info.tasksDone, total);
-                }
-                // Truncate to fit
+            if (info.hasUsage && info.usageLine1 && info.usageLine1[0]) {
+                char usage[48];
+                strncpy(usage, info.usageLine1, sizeof(usage) - 1);
+                usage[sizeof(usage) - 1] = 0;
                 _u8g2.setFont(u8g2_font_helvR08_tr);
-                const int16_t MAX_W2 = DISP_WIDTH - RX - 4;
-                while (strlen(tasks) > 8 && _u8g2.getUTF8Width(tasks) > MAX_W2) {
-                    tasks[strlen(tasks) - 1] = '\0';
-                }
-                drawTextAt(tasks, RX, 82, u8g2_font_helvR08_tr);
+                u8g2FitTrim(_u8g2, usage, MAX_W);
+                drawTextAt(usage, RX, 96, u8g2_font_helvR08_tr);
+            } else if (info.toolCalls > 0 && total > 0) {
+                char stats[36];
+                snprintf(stats, sizeof(stats), "%u calls  R%u W%u E%u",
+                         info.toolCalls, info.reads, info.writes, info.edits);
+                _u8g2.setFont(u8g2_font_helvR08_tr);
+                u8g2FitTrim(_u8g2, stats, MAX_W);
+                drawTextAt(stats, RX, 96, u8g2_font_helvR08_tr);
             }
 
             // === Bottom black info bar (static: IP + hostname) ===
@@ -797,7 +864,7 @@ void DisplayManager::showTimeMode(const String& time, const String& date) {
     if (!_initialized) return;
 
     if (xSemaphoreTake(_mutex, portMAX_DELAY)) {
-        _lastScreenType = 4;
+        _lastScreenType = 5;
         _forceFullRefresh = false;
         _display->setFullWindow();
         _display->firstPage();

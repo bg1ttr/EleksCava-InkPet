@@ -25,15 +25,32 @@ ConfigManager* ConfigManager::getInstance() {
     return _instance;
 }
 
+String ConfigManager::normalizeLedBrightness(const String& val) {
+    if (val == "0") return "off";
+    if (val == "1") return "low";
+    if (val == "2") return "medium";
+    if (val == "3") return "high";
+    if (val == "off" || val == "low" || val == "medium" || val == "high") return val;
+    return "medium";
+}
+
+String ConfigManager::normalizeBuzzerVolume(const String& val) {
+    if (val == "1") return "low";
+    if (val == "2") return "medium";
+    if (val == "3") return "high";
+    if (val == "low" || val == "medium" || val == "high") return val;
+    return "low";
+}
+
 bool ConfigManager::loadConfig() {
     if (!_prefs.begin("inkspet", true)) {
         LOG_ERROR(TAG, "Failed to open NVS for reading");
         return false;
     }
 
-    _ledBrightness = _prefs.getString("ledBright", "medium");
+    _ledBrightness = normalizeLedBrightness(_prefs.getString("ledBright", "medium"));
     _buzzerEnabled = _prefs.getBool("buzzerOn", true);
-    _buzzerVolume = _prefs.getString("buzzerVol", "low");
+    _buzzerVolume = normalizeBuzzerVolume(_prefs.getString("buzzerVol", "low"));
     _permissionTimeout = _prefs.getInt("permTimeout", 60);
     _permissionDefault = _prefs.getString("permDefault", "deny");
     _dndMode = _prefs.getBool("dndMode", false);

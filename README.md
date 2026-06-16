@@ -23,12 +23,12 @@ InksPet is firmware. [EleksCava](https://elekscava.com) is the hardware. Togethe
 ## Features
 
 - **Claude Desktop BLE (v1.1.0+)** — Native support for Anthropic's [Hardware Buddy](https://github.com/anthropics/claude-desktop-buddy) protocol. Pair over LE Secure Connections, receive live session snapshots, approve tool calls with physical buttons, receive GIF character packs — see [Claude Desktop Integration](#claude-desktop-integration-v110) below
-- **12 Agent States** — Pixel art Clawd crab with unique pose per state
-- **RGB LED Status** — Blue=thinking, Green=working, Red=error, Yellow=permission
+- **13 Agent States** — Pixel art Clawd crab with compact e-paper poses per state
+- **RGB LED Status** — Blue=thinking, green chase/progress=working, red=error, yellow=permission/input
 - **Physical Permission Buttons** — Press A/B/C to approve/deny, zero window switching
 - **Chinese / UTF-8 Text** — HUD and permission screen render Chinese tool names, file paths, and Claude transcript summaries (wqy12 font, ~3000 glyphs)
 - **Tool Call Statistics** — Live Read/Write/Edit/Bash counts + elapsed time + file path
-- **One-Click Hook Setup** — Web dashboard with copy-paste prompt, AI configures itself
+- **One-Click Hook Setup** — Web dashboard exposes an install script and local bridge for Codex / Claude / Cursor-style agents
 - **DND Mode** — Long-press B to mute LED + buzzer, auto-deny permissions
 - **Captive Portal** — AP mode auto-opens WiFi config page on phone
 - **Web Dashboard** — Real-time status, device config, hook setup at `http://inkspet.local`
@@ -48,7 +48,7 @@ Based on the [EleksCava](https://elekscava.com) e-paper smart device:
 - **Battery**: 3.7V Li-Po with USB-C charging
 - **Power**: USB-C
 
-## 12 Agent States
+## 13 Agent States
 
 Rule of thumb: **Blue = thinking, Green = working, Red = error, Yellow = act**
 
@@ -57,9 +57,10 @@ Rule of thumb: **Blue = thinking, Green = working, Red = error, Yellow = act**
 | Sleeping | Curled up, zzz | Off | — | 60s+ idle |
 | Idle | Relaxed pose | White dim | Solid | No activity |
 | Thinking | Thought bubble | Blue | Breathing | `UserPromptSubmit` |
-| Working | Keyboard pose | Green | Solid | `PreToolUse` / `PostToolUse` |
+| Working | Keyboard pose | Green | Chase / progress | `PreToolUse` / `PostToolUse` |
 | Completed | Celebrating | Green | Fade once | `Stop` / `PostCompact` |
 | Error | Shocked face, ! | Red | Fast flash | `PostToolUseFailure` |
+| Ask | Question mark | Yellow | Breathing | `Ask` / `Question` / `UserInputRequest` |
 | Permission | Question mark | Yellow | Flash | `PermissionRequest` |
 | Juggling | Tossing ball | Purple | Breathing | `SubagentStart` (1-2 sessions) |
 | Conducting | Baton raised | Purple | Solid | `SubagentStart` (3+ sessions) |
@@ -109,11 +110,12 @@ AI Coding Agents (HTTP)                 EleksCava Hardware                      
 |--------|-------------|
 | `DisplayManager` | E-paper driver (GxEPD2), sidebar layout, Buddy HUD, CJK font auto-switch, anti-ghosting |
 | `RGBLed` | WS2812 LED effects (solid, breathing, flash, rainbow, fade) |
-| `AgentStateManager` | State machine, 12 states, priority resolution, multi-session tracking |
+| `AgentStateManager` | State machine, 13 states, priority resolution, multi-session tracking |
 | `PermissionManager` | Permission request queue (max 4), source-tagged (BLE/HTTP), timeout auto-deny |
 | `PixelArt` | 11 Clawd crab XBM bitmaps (48x48, 1-bit) |
 | `WiFiManager` | WiFi STA connection, AP mode, credential storage (NVS) |
 | `InksPetWebServer` | AsyncWebServer, REST API, WebSocket, LittleFS static files |
+| `AgentHudConfig` | NVS-backed AI HUD display, privacy, and LED-progress settings |
 | `buddy/BleBridge` | NimBLE Nordic UART Service, LE Secure Connections, passkey bonding |
 | `buddy/BuddyProtocol` | Hardware Buddy JSON line parser, snapshot / turn / cmd / status ack |
 | `buddy/BuddyStateMapper` | Maps official 7-state BLE semantics to InksPet's 12-state enum |
@@ -155,6 +157,7 @@ Content-Type: application/json
 | `PreToolUse` | working |
 | `PostToolUse` | working |
 | `PostToolUseFailure` | error |
+| `Ask` / `Question` / `UserInputRequest` | ask |
 | `SubagentStart` (1-2 sessions) | juggling |
 | `SubagentStart` (3+ sessions) | conducting |
 | `Stop` / `PostCompact` | completed |
@@ -191,6 +194,17 @@ GET /api/agent/status
   "session": "abc123",
   "tool": "Edit",
   "file": "src/main.cpp",
+  "task": {
+    "title": "Fix settings UI",
+    "repo": "EleksCava-InkPet",
+    "branch": "main",
+    "action": "Edit src/main.cpp"
+  },
+  "progress": {
+    "reliable": true,
+    "done": 2,
+    "total": 5
+  },
   "uptime": 3600,
   "active_sessions": 2
 }
@@ -208,13 +222,31 @@ GET /api/device/info
 GET /api/config
 POST /api/config
 POST /api/config/reset
+GET /api/agent/config
+POST /api/agent/config
+POST /api/agent/config/test
 ```
+
+### Local Bridge
+
+```
+GET /api/agent/bridge.js
+GET /api/agent/install.sh?agent=codex
+```
+
+The bridge normalizes richer agent events into InksPet's compact HUD contract: title, repo, branch, action, usage windows, recent completion, permission command, and Todo progress.
 
 ## Hook Setup
 
 ### The Easy Way
 
-Open the InksPet Web Dashboard at `http://inkspet.local` (or device IP), click **Hook Setup**, copy the prompt, paste it to your AI coding assistant. It configures itself. 10 seconds.
+Open the InksPet Web Dashboard at `http://inkspet.local` (or device IP), click **Hook Setup**, then run the install command:
+
+```sh
+curl -fsSL 'http://inkspet.local/api/agent/install.sh?agent=codex' | sh
+```
+
+The installer downloads the bridge to `~/.inkspet-agent-hud`, preserves existing Codex hooks, writes a backup before editing, and sends a test event to the device. The copy-paste prompt and manual JSON tabs remain available as fallback paths.
 
 ### Manual Setup (Claude Code)
 

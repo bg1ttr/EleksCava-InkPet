@@ -24,6 +24,7 @@ public:
     void setEnabled(bool enabled) { _enabled = enabled; }
     bool isEnabled() const { return _enabled; }
     void setVolume(uint8_t duty) { _volume = duty; }
+    void setVolumeLevel(const String& level);
 
     void update();  // Call from loop for async playback
 

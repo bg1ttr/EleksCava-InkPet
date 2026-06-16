@@ -8,6 +8,7 @@ public:
     bool begin();
     void end();
     AsyncWebServer* getServer() { return _server; }
+    void broadcastState();
 
 private:
     InksPetWebServer();
@@ -26,5 +27,4 @@ private:
 
     void handleWebSocketMessage(AsyncWebSocketClient* client, const char* data);
     void sendDeviceInfo(AsyncWebSocketClient* client);
-    void broadcastState();
 };

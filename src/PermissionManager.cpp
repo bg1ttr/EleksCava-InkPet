@@ -60,6 +60,26 @@ void PermissionManager::handleAllow() { respond("allow"); }
 void PermissionManager::handleAlwaysAllow() { respond("always_allow"); }
 void PermissionManager::handleDeny() { respond("deny"); }
 
+bool PermissionManager::respondToSession(const String& sessionId, const String& action) {
+    for (int i = 0; i < MAX_QUEUE; i++) {
+        if (!_queue[i].active || _queue[i].sessionId != sessionId) continue;
+
+        LOG_INFO(TAG, "Response [%s]: %s for session %s",
+                 _queue[i].source == Source::BLE ? "BLE" : "HTTP",
+                 action.c_str(), sessionId.c_str());
+
+        if (_responseCallback) {
+            _responseCallback(_queue[i].sessionId, action, _queue[i].source);
+        }
+
+        _queue[i].active = false;
+        _pendingCount--;
+        advanceQueue();
+        return true;
+    }
+    return false;
+}
+
 void PermissionManager::respond(const String& action) {
     if (_pendingCount <= 0) return;
 
@@ -100,6 +120,7 @@ void PermissionManager::update() {
     if (_pendingCount <= 0) return;
 
     int timeoutSec = ConfigManager::getInstance()->getPermissionTimeout();
+    if (timeoutSec <= 0) return;
     unsigned long timeoutMs = static_cast<unsigned long>(timeoutSec) * 1000;
 
     for (int i = 0; i < MAX_QUEUE; i++) {

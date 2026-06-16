@@ -9,6 +9,8 @@ enum class LedEffect {
     FLASH,
     FAST_FLASH,
     FADE_ONCE,
+    CHASE,
+    PROGRESS,
     RAINBOW
 };
 
@@ -42,6 +44,7 @@ public:
     void setBrightnessLevel(const String& level);
     void startRainbow();
     void stopAll();
+    void setProgress(uint8_t done, uint8_t total, LedColor color);
 
     void update();  // Call from loop for animation
 
@@ -55,8 +58,11 @@ private:
     uint8_t _brightness;
     unsigned long _lastUpdate;
     uint16_t _animStep;
+    uint8_t _progressDone;
+    uint8_t _progressTotal;
     bool _initialized;
 
     void applyColor(uint8_t r, uint8_t g, uint8_t b);
+    void applyProgress();
     uint8_t breathe(uint8_t val) const;
 };
